@@ -1,0 +1,11 @@
+// routes/clientFournisseur.routes.js
+const express = require('express');
+const router = express.Router();
+
+router.get('/', clientFournisseurController.getAll);
+router.get('/:id', clientFournisseurController.getById);
+router.post('/', clientFournisseurController.create);
+router.put('/:id', clientFournisseurController.update);
+router.delete('/:id', clientFournisseurController.delete);
+
+module.exports = router;

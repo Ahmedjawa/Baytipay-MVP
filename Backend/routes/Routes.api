@@ -1,0 +1,7 @@
+// Routes API
+app.use('/api/parties', clientFournisseurRoutes);
+app.use('/api/dossiers', dossierRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/caisse', caisseRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/dashboard', dashboardRoutes);

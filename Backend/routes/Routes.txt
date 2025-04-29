@@ -1,0 +1,7 @@
+ Routes
+const clientFournisseurRoutes = require('.routesclientFournisseur.routes');
+const dossierRoutes = require('.routesdossier.routes');
+const transactionRoutes = require('.routestransaction.routes');
+const caisseRoutes = require('.routescaisse.routes');
+const aiRoutes = require('.routesai.routes');
+const dashboardRoutes = require('.routesdashboard.routes');

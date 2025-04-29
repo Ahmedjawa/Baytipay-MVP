@@ -1,0 +1,4 @@
+// Route de test
+app.get('/', (req, res) => {
+  res.send('API de gestion de trésorerie fonctionnelle');
+});
