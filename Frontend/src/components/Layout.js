@@ -1,7 +1,7 @@
 // client/src/components/Layout.js - Structure générale de l'application
 
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { 
   AppBar, Box, Drawer, Toolbar, Typography, Divider, IconButton, 
   List, ListItem, ListItemIcon, ListItemText, Menu, MenuItem, 
@@ -21,13 +21,15 @@ import {
   ChevronLeft as ChevronLeftIcon,
   Logout as LogoutIcon
 } from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext'; // Import du contexte d'authentification
 
 // Largeur du drawer
 const drawerWidth = 240;
 
-export default function Layout({ children, setDirection }) {
+export default function Layout({ setDirection }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth(); // Récupération de la fonction de déconnexion
   
   // États pour la gestion du drawer et des menus
   const [open, setOpen] = useState(true);
@@ -60,6 +62,13 @@ export default function Layout({ children, setDirection }) {
       setDirection('ltr');
     }
     handleCloseLangMenu();
+  };
+  
+  // Fonction de déconnexion
+  const handleLogout = () => {
+    handleCloseUserMenu();
+    logout();
+    navigate('/login');
   };
   
   // Éléments du menu principal
@@ -161,7 +170,8 @@ export default function Layout({ children, setDirection }) {
               </ListItemIcon>
               <Typography textAlign="center">Profil</Typography>
             </MenuItem>
-            <MenuItem onClick={handleCloseUserMenu}>
+            {/* Modification: ajout de la fonction handleLogout */}
+            <MenuItem onClick={handleLogout}>
               <ListItemIcon>
                 <LogoutIcon fontSize="small" />
               </ListItemIcon>
@@ -209,7 +219,7 @@ export default function Layout({ children, setDirection }) {
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
         <Container maxWidth="xl">
-          {children}
+          <Outlet /> {/* Modification: remplacé children par Outlet pour React Router v6 */}
         </Container>
       </Box>
     </Box>

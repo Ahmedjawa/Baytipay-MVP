@@ -6,6 +6,7 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import { Add, Edit, Delete } from '@mui/icons-material';
 import axios from 'axios';
+import config from '../config';
 
 export default function FournisseursPage() {
   const [fournisseurs, setFournisseurs] = useState([]);
@@ -18,7 +19,7 @@ export default function FournisseursPage() {
   const fetchFournisseurs = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('/api/fournisseurs');
+      const res = await axios.get(`${config.backendURL}/fournisseurs`);
       setFournisseurs(res.data);
     } catch (error) {
       console.error(error);
@@ -60,10 +61,10 @@ export default function FournisseursPage() {
   const handleSave = async () => {
     try {
       if (selectedFournisseur) {
-        await axios.put(`/api/fournisseurs/${selectedFournisseur._id}`, formData);
+        await axios.put(`${config.backendURL}/fournisseurs/${selectedFournisseur._id}`, formData);
         setSnackbar({ open: true, message: "Fournisseur modifié", severity: "success" });
       } else {
-        await axios.post('/api/fournisseurs', { ...formData, type: 'fournisseur' });
+        await axios.post(`${config.backendURL}/fournisseurs` , formData);
         setSnackbar({ open: true, message: "Fournisseur ajouté", severity: "success" });
       }
       handleCloseDialog();
@@ -77,7 +78,7 @@ export default function FournisseursPage() {
   const handleDelete = async (id) => {
     if (window.confirm("Voulez-vous supprimer ce fournisseur ?")) {
       try {
-        await axios.delete(`/api/fournisseurs/${id}`);
+        await axios.delete(`${config.backendURL}/fournisseurs${id}`);
         setSnackbar({ open: true, message: "Fournisseur supprimé", severity: "success" });
         fetchFournisseurs();
       } catch (error) {

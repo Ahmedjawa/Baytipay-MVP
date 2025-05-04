@@ -9,6 +9,8 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import { Add, Edit, Delete } from '@mui/icons-material';
 import axios from 'axios';
+import config from '../config';
+import apiClient from '../utils/apiClient';
 
 export default function CaissePage() {
   const [caisses, setCaisses] = useState([]);
@@ -25,7 +27,7 @@ export default function CaissePage() {
   const fetchCaisses = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('/api/caisses');
+      const res = await apiClient.get('/api/caisses') ;
       setCaisses(res.data);
     } catch (error) {
       console.error(error);
@@ -73,7 +75,7 @@ export default function CaissePage() {
   const handleSave = async () => {
     try {
       if (selectedCaisse) {
-        await axios.put(`/api/caisses/${selectedCaisse._id}`, formData);
+        await axios.put(`${config.backendURL}/caisses/${selectedCaisse._id}`, formData);
         setSnackbar({ open: true, message: "Caisse modifiée", severity: "success" });
       } else {
         await axios.post('/api/caisses', formData);
@@ -90,7 +92,7 @@ export default function CaissePage() {
   const handleDelete = async (id) => {
     if (window.confirm("Supprimer cette caisse ?")) {
       try {
-        await axios.delete(`/api/caisses/${id}`);
+        await axios.delete(`${config.backendURL}/caisses/${id}`);
         setSnackbar({ open: true, message: "Caisse supprimée", severity: "success" });
         fetchCaisses();
       } catch (error) {

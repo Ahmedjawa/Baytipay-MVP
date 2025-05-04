@@ -7,6 +7,8 @@ import {
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import axios from 'axios';
+import config from '../config';
+import apiClient from '../utils/apiClient';
 
 export default function DossierDetailsPage() {
   const { id } = useParams();
@@ -17,8 +19,8 @@ export default function DossierDetailsPage() {
   const fetchDossierDetails = async () => {
     try {
       setLoading(true);
-      const dossierRes = await axios.get(`/api/dossiers/${id}`);
-      const transactionsRes = await axios.get(`/api/transactions?dossierId=${id}`);
+      const dossierRes = await apiClient.get(`${config.backendURL}/dossiers/${id}`);
+      const transactionsRes = await apiClient.get(`${config.backendURL}/transactions?dossierId=${id}`);
       setDossier(dossierRes.data);
       setTransactions(transactionsRes.data);
     } catch (error) {

@@ -1,14 +1,17 @@
 const express = require('express');
-const echeanceRouter = express.Router();
+const router = express.Router();
+const echeanceController = require('../controllers/echeance.controller');
 
-const transactionController = require('../controllers/transaction.controller'); // Assurez-vous que ce chemin est correct
+// Obtenir toutes les échéances
+router.get('/', echeanceController.getAll);
 
-// Routes pour les échéances
-echeanceRouter.get('/', transactionController.getAll);
-echeanceRouter.get('/:id', transactionController.getById);
-echeanceRouter.post('/', transactionController.create);
-echeanceRouter.put('/:id', transactionController.update);
-echeanceRouter.delete('/:id', transactionController.delete);
-echeanceRouter.post('/echeancier', transactionController.generateEcheancier);
+// Créer une nouvelle échéance
+router.post('/', echeanceController.create);
 
-module.exports = echeanceRouter;
+// Mettre à jour une échéance
+router.put('/:id', echeanceController.update);
+
+// Supprimer une échéance
+router.delete('/:id', echeanceController.remove);
+
+module.exports = router;

@@ -8,20 +8,22 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import { Add, Edit, Delete } from '@mui/icons-material';
 import axios from 'axios';
+import config from '../config';
+import apiClient from '../utils/apiClient';
 
 export default function ClientsPage() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
-  const [formData, setFormData] = useState({ nom: '', adresse: '', telephone: '', email: '', matriculeFiscale: '' });
+  const [formData, setFormData] = useState({ nom: '', adresse: '', telephone: '', email: '', matriculeFiscal: '' });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   // Charger les clients
   const fetchClients = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('/api/clients');
+      const res = await apiClient.get(`${config.backendURL}/clients`);
       setClients(res.data);
     } catch (error) {
       console.error(error);
@@ -43,10 +45,10 @@ export default function ClientsPage() {
         adresse: client.adresse || '',
         telephone: client.telephone || '',
         email: client.email || '',
-        matriculeFiscale: client.matriculeFiscale || ''
+        matriculeFiscal: client.matriculeFiscal || ''
       });
     } else {
-      setFormData({ nom: '', adresse: '', telephone: '', email: '', matriculeFiscale: '' });
+      setFormData({ nom: '', adresse: '', telephone: '', email: '', matriculeFiscal: '' });
     }
     setOpenDialog(true);
   };
@@ -60,27 +62,31 @@ export default function ClientsPage() {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleSave = async () => {
-    try {
-      if (selectedClient) {
-        await axios.put(`/api/clients/${selectedClient._id}`, formData);
-        setSnackbar({ open: true, message: "Client modifié avec succès", severity: "success" });
-      } else {
-        await axios.post('/api/clients', { ...formData, type: 'client' });
-        setSnackbar({ open: true, message: "Client ajouté avec succès", severity: "success" });
-      }
-      handleCloseDialog();
-      fetchClients();
-    } catch (error) {
-      console.error(error);
-      setSnackbar({ open: true, message: "Erreur d'enregistrement", severity: "error" });
+const handleSave = async () => {
+  try {
+    if (selectedClient) {
+      await axios.put(`${config.backendURL}/clients/${selectedClient._id}`, formData);
+      setSnackbar({ open: true, message: "Client modifié avec succès", severity: "success" });
+    } else {
+      await axios.post(`${config.backendURL}/clients`, formData);
+      setSnackbar({ open: true, message: "Client ajouté avec succès", severity: "success" });
     }
-  };
+    handleCloseDialog();
+    fetchClients();
+  } catch (error) {
+    console.error("Erreur API Client:", error.response?.data || error.message);
+    setSnackbar({
+      open: true,
+      message: error.response?.data?.message || "Erreur lors de l'enregistrement",
+      severity: "error"
+    });
+  }
+};
 
   const handleDelete = async (id) => {
     if (window.confirm("Voulez-vous supprimer ce client ?")) {
       try {
-        await axios.delete(`/api/clients/${id}`);
+        await axios.delete(`${config.backendURL}/clients/${id}`);
         setSnackbar({ open: true, message: "Client supprimé", severity: "success" });
         fetchClients();
       } catch (error) {
@@ -95,7 +101,7 @@ export default function ClientsPage() {
     { field: 'adresse', headerName: 'Adresse', flex: 1 },
     { field: 'telephone', headerName: 'Téléphone', flex: 1 },
     { field: 'email', headerName: 'Email', flex: 1 },
-    { field: 'matriculeFiscale', headerName: 'Matricule Fiscale', flex: 1 },
+    { field: 'matriculeFiscal', headerName: 'Matricule Fiscale', flex: 1 },
     {
       field: 'actions', headerName: 'Actions', width: 150, renderCell: (params) => (
         <Box>
@@ -145,7 +151,7 @@ export default function ClientsPage() {
           <TextField label="Adresse" name="adresse" value={formData.adresse} onChange={handleChange} fullWidth />
           <TextField label="Téléphone" name="telephone" value={formData.telephone} onChange={handleChange} fullWidth />
           <TextField label="Email" name="email" value={formData.email} onChange={handleChange} fullWidth />
-          <TextField label="Matricule Fiscale" name="matriculeFiscale" value={formData.matriculeFiscale} onChange={handleChange} fullWidth />
+          <TextField label="Matricule Fiscale" name="matriculeFiscal" value={formData.matriculeFiscal} onChange={handleChange} fullWidth />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Annuler</Button>

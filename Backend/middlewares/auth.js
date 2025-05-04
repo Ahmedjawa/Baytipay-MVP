@@ -1,17 +1,22 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/user.model');
 
-module.exports = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Authentification requise' });
-  }
+module.exports = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) throw new Error('Token manquant');
 
-  const token = authHeader.split(' ')[1];
-  
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(403).json({ message: 'Token invalide' });
-    req.userId = decoded.userId;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+    
+    if (!user) throw new Error('Utilisateur introuvable');
+
+    req.user = user;
     next();
-  });
+  } catch (error) {
+    res.status(401).json({ 
+      success: false,
+      message: error.message || 'Authentification requise' 
+    });
+  }
 };

@@ -8,6 +8,8 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import { Add, Edit, Delete } from '@mui/icons-material';
 import axios from 'axios';
+import config from '../config';
+import apiClient from '../utils/apiClient';
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
@@ -25,7 +27,7 @@ export default function TransactionsPage() {
   const fetchTransactions = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('/api/transactions');
+      const res = await apiClient.get(`${config.backendURL}/transactions`);
       setTransactions(res.data);
     } catch (error) {
       console.error(error);
@@ -37,7 +39,7 @@ export default function TransactionsPage() {
 
   const fetchDossiers = async () => {
     try {
-      const res = await axios.get('/api/dossiers');
+      const res = await apiClient.get(`${config.backendURL}/dossier`);
       setDossiers(res.data);
     } catch (error) {
       console.error(error);
@@ -82,10 +84,10 @@ export default function TransactionsPage() {
   const handleSave = async () => {
     try {
       if (selectedTransaction) {
-        await axios.put(`/api/transactions/${selectedTransaction._id}`, formData);
+        await axios.put(`${config.backendURL}/transactions/${selectedTransaction._id}`, formData);
         setSnackbar({ open: true, message: "Transaction modifiée", severity: "success" });
       } else {
-        await axios.post('/api/transactions', formData);
+        await axios.post(`${config.backendURL}/transactions`, formData);
         setSnackbar({ open: true, message: "Transaction ajoutée", severity: "success" });
       }
       handleCloseDialog();
@@ -99,7 +101,7 @@ export default function TransactionsPage() {
   const handleDelete = async (id) => {
     if (window.confirm("Supprimer cette transaction ?")) {
       try {
-        await axios.delete(`/api/transactions/${id}`);
+        await axios.delete(`${config.backendURL}/transactions/${id}`);
         setSnackbar({ open: true, message: "Transaction supprimée", severity: "success" });
         fetchTransactions();
       } catch (error) {

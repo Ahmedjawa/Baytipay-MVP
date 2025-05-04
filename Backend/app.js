@@ -1,89 +1,115 @@
-
-// Importations
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const dotenv = require('dotenv');
-const path = require('path');
-const echeanceRoutes = require('./routes/echeance.routes'); // Importez les routes
+const { errors } = require('celebrate');
+const authRoutes = require('./routes/auth.routes');
+const authMiddleware = require('./middlewares/auth');
 
-// Charger les variables d'environnement
-dotenv.config()
-// Vérifiez que la variable MONGODB_URI est bien 
-console.log("MONGODB_URI dans .env :", process.env.MONGODB_URI);
-if (!process.env.MONGODB_URI) {
-  console.error("Erreur : La variable MONGODB_URI n'est pas définie !");
+// Vérification des variables d'environnement
+if (!process.env.JWT_SECRET || !process.env.MONGODB_URI) {
+  console.error('❌ Variables d\'environnement manquantes');
   process.exit(1);
 }
 
-// Créer l'application Express
+// Initialisation de l'application
 const app = express();
 
-// Middleware pour parser les données JSON
-app.use(express.json());
-
-// Connexion à MongoDB
-const mongoUri = process.env.MONGODB_URI;
-//const mongoUri = "mongodb+srv://ahmedjaoua90:FranceParis0101@cluster0.c53lzpz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
-mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("Connecté à MongoDB Atlas"))
-  .catch((err) => console.error("Erreur de connexion à MongoDB :", err));
-// Route de test
-app.get('/', (req, res) => {
-  res.send('Backend is running 🚀');
+// Middlewares
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`, {
+    body: req.body,
+    headers: req.headers,
+    query: req.query
+  });
+  next();
 });
 
-// Choisir un port
-const PORT = process.env.PORT || 5000;
-
-// Lancer le serveur
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
-
-// Exemple de route API pour le frontend
-app.get('/api/data', (req, res) => {
-    const exempleDonnees = [
-        { nom: "Élément 1" },
-        { nom: "Élément 2" },
-        { nom: "Élément 3" },
-    ];
-    res.json(exempleDonnees); // Renvoie des données au frontend
-});
-
-// Autoriser les requêtes du frontend
 app.use(cors({
-    origin: "http://localhost:3000", // Remplacez par l'URL de votre frontend en production
+  origin: ['http://localhost:3000', 'http://localhost:5173'], // Inclure tous les domaines frontend
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/api/auth', authRoutes);
 
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
+// Connexion MongoDB
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('✅ MongoDB connecté avec succès'))
+  .catch(err => console.error('❌ Erreur MongoDB :', err));
 
-// Nouveau middleware d'authentification
-const authMiddleware = (req, res, next) => {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
-  if (!token) return res.status(401).send('Accès refusé');
 
+
+// Import des modèles
+const User =require('./models/user.model');
+require('./models/dossier.model');
+require('./models/echeance.model');
+require('./models/transaction.model');
+require('./models/caisse.model');
+require('./models/documentOCR.model');
+require('./models/notification.model');
+require('./models/client.model');
+require('./models/fournisseur.model');
+
+
+
+// Routes
+app.use('/api/auth', require('./routes/auth.routes'));
+app.use('/api/clients', require('./routes/client.routes'));
+app.use('/api/fournisseur', require('./routes/fournisseur.routes'));
+app.use('/api/users', require('./routes/user.routes'));
+app.use('/api/dashboard', require('./routes/dashboard.routes'));
+app.use('/api/dossiers', require('./routes/dossier.routes'));
+app.use('/api/echeances', require('./routes/echeance.routes'));
+app.use('/api/transactions', require('./routes/transaction.routes'));
+app.use('/api/caisse', require('./routes/caisse.routes'));
+app.use('/api/ai', require('./routes/ai.routes'));
+//app.use('/api/ai', require('./routes/test.routes'));
+
+// Validation des erreurs
+app.use(errors());
+
+// Middleware d'erreur
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ 
+    message: err.message || 'Internal Server Error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+
+
+
+// Route protégée qui nécessite authentification
+app.get('/api/profile', authMiddleware, async (req, res) => {
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch (err) {
-    res.status(400).send('Token invalide');
-  }
-};
-
-// Route login
-app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
-  
-  // Vérification simplifiée (à remplacer par une vraie DB)
-  if (email === 'admin@baytipay.tn' && password === 'secret') {
-    const token = jwt.sign({ userId: 1 }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.send({ token });
-  } else {
-    res.status(400).send('Identifiants invalides');
+    // req.user est déjà rempli par le middleware auth
+    res.send({ 
+      success: true, 
+      user: { 
+        id: req.user._id, 
+        email: req.user.email, 
+        nom: req.user.nom, 
+        prenom: req.user.prenom 
+      } 
+    });
+  } catch (error) {
+    res.status(500).send({ success: false, message: 'Erreur lors de la récupération du profil' });
   }
 });
 
-// Protéger les routes
-app.use('/api/echeances', authMiddleware, echeanceRoutes);
+// Route pour vérifier la validité du token
+app.get('/api/verify-token', authMiddleware, (req, res) => {
+  res.status(200).send({ valid: true });
+});
+
+// Démarrage du serveur
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

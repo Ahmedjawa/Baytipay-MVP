@@ -1,17 +1,21 @@
 // client/src/App.js - Point d'entrée de l'application React
 
-//import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useEffect, useState } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { frFR } from '@mui/material/locale';
 import rtlPlugin from 'stylis-plugin-rtl';
 import { CacheProvider } from '@emotion/react';
 import createCache from '@emotion/cache';
 import { prefixer } from 'stylis';
-import React, { useEffect, useState } from "react";
 import axios from "axios";
 import config from "./config";
+import apiClient from './utils/apiClient';
+
+
+// Contexte d'authentification
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Composants principaux
 import Layout from './components/Layout';
@@ -25,6 +29,8 @@ import CaissePage from './pages/Caisse';
 import ChatbotPage from './pages/Chatbot';
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
+import Login from './pages/Login';
+import Register from './pages/Register'; 
 
 // Thème personnalisé
 const theme = createTheme({
@@ -60,7 +66,6 @@ const theme = createTheme({
   },
 });
 
-
 // Configuration RTL pour support arabe
 const cacheRtl = createCache({
   key: 'muirtl',
@@ -71,31 +76,18 @@ function App() {
   // État pour gérer la direction du texte (LTR/RTL)
   const [direction, setDirection] = React.useState('ltr');
   
-   const [data, setData] = useState([]);
+  const [data, setData] = useState([]);
 
-    useEffect(() => {
-        // Appel API vers le backend
-        axios.get(`${config.backendURL}/api/data`)
-            .then((response) => {
-                setData(response.data);
-            })
-            .catch((error) => {
-                console.error("Erreur lors de la récupération des données :", error);
-            });
-    }, []);
-
-  //  return (
-    //    <div>
-      //      <h1>Liste des données</h1>
-        //    <ul>
-          //      {data.map((item, index) => (
-            //        <li key={index}>{item.nom}</li>
-     //           ))}
-       //     </ul>
-       // </div>
-   // );
-  
-  
+  useEffect(() => {
+    // Appel API vers le backend
+   apiClient.get('/api/data')
+      .then((response) => {
+        setData(response.data);
+      })
+      .catch((error) => {
+        console.error("Erreur lors de la récupération des données :", error);
+      });
+  }, []);
   
   // Mise à jour du thème quand la direction change
   const themeWithDirection = React.useMemo(
@@ -108,47 +100,50 @@ function App() {
   
   return (
     <Router>
-      {direction === 'rtl' ? (
-        <CacheProvider value={cacheRtl}>
+      <AuthProvider>
+        {direction === 'rtl' ? (
+          <CacheProvider value={cacheRtl}>
+            <ThemeProvider theme={themeWithDirection}>
+              <CssBaseline />
+              <AppRoutes setDirection={setDirection} />
+            </ThemeProvider>
+          </CacheProvider>
+        ) : (
           <ThemeProvider theme={themeWithDirection}>
             <CssBaseline />
-            <Layout setDirection={setDirection}>
-              <AppRoutes />
-            </Layout>
+            <AppRoutes setDirection={setDirection} />
           </ThemeProvider>
-        </CacheProvider>
-      ) : (
-        <ThemeProvider theme={themeWithDirection}>
-          <CssBaseline />
-          <Layout setDirection={setDirection}>
-            <AppRoutes />
-          </Layout>
-        </ThemeProvider>
-      )}
+        )}
+      </AuthProvider>
     </Router>
   );
 }
 
-
 // Définition des routes
-function AppRoutes() {
+function AppRoutes({ setDirection }) {
   return (
     <Routes>
-      <Route path="/" element={<Dashboard />} />
-      <Route path="/clients" element={<ClientsPage />} />
-      <Route path="/fournisseurs" element={<FournisseursPage />} />
-      <Route path="/dossiers" element={<DossiersPage />} />
-      <Route path="/dossiers/:id" element={<DossierDetailsPage />} />
-      <Route path="/transactions" element={<TransactionsPage />} />
-      <Route path="/caisse" element={<CaissePage />} />
-      <Route path="/chatbot" element={<ChatbotPage />} />
-      <Route path="/settings" element={<Settings />} />
-      <Route path="*" element={<NotFound />} />
+      {/* Route publique pour la connexion */}
+      <Route path="/login" element={<Login />} />
+	  <Route path="/register" element={<Register />} />
+      
+      {/* Routes protégées nécessitant une authentification */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<Layout setDirection={setDirection} />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/fournisseurs" element={<FournisseursPage />} />
+          <Route path="/dossiers" element={<DossiersPage />} />
+          <Route path="/dossiers/:id" element={<DossierDetailsPage />} />
+          <Route path="/transactions" element={<TransactionsPage />} />
+          <Route path="/caisse" element={<CaissePage />} />
+          <Route path="/chatbot" element={<ChatbotPage />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Route>
     </Routes>
   );
 }
-// API pour récupérer des données depuis le backend :
-
-
 
 export default App;

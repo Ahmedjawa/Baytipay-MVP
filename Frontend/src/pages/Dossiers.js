@@ -8,6 +8,7 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import { Add, Edit, Delete } from '@mui/icons-material';
 import axios from 'axios';
+import config from '../config';
 
 export default function DossiersPage() {
   const [dossiers, setDossiers] = useState([]);
@@ -24,7 +25,7 @@ export default function DossiersPage() {
   const fetchDossiers = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('/api/dossiers');
+      const res = await axios.get(`${config.backendURL}/dossiers`);
       setDossiers(res.data);
     } catch (error) {
       console.error(error);
@@ -36,7 +37,7 @@ export default function DossiersPage() {
 
   const fetchParties = async () => {
     try {
-      const res = await axios.get('/api/clients'); // suppose qu'on charge clients et fournisseurs
+      const res = await axios.get(`${config.backendURL}/clients`); // suppose qu'on charge clients et fournisseurs
       setParties(res.data);
     } catch (error) {
       console.error(error);
@@ -78,7 +79,7 @@ export default function DossiersPage() {
   const handleSave = async () => {
     try {
       if (selectedDossier) {
-        await axios.put(`/api/dossiers/${selectedDossier._id}`, formData);
+       await axios.put(`${config.backendURL}/dossiers/${selectedDossier._id}`, formData);
         setSnackbar({ open: true, message: "Dossier modifié", severity: "success" });
       } else {
         await axios.post('/api/dossiers', formData);
@@ -95,7 +96,7 @@ export default function DossiersPage() {
   const handleDelete = async (id) => {
     if (window.confirm("Supprimer ce dossier ?")) {
       try {
-        await axios.delete(`/api/dossiers/${id}`);
+        await axios.delete(`${config.backendURL}/dossiers/${id}`);
         setSnackbar({ open: true, message: "Dossier supprimé", severity: "success" });
         fetchDossiers();
       } catch (error) {
