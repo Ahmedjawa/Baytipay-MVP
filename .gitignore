@@ -17,4 +17,5 @@ yarn-debug.log*
 yarn-error.log*
 
 # Fichiers système
-.DS_Store
+.DS_StoreFrontend/node_modules/
+Frontend/.cache/
