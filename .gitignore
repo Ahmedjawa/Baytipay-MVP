@@ -1,10 +1,20 @@
-# Ignorer node_modules
-#node_modules/
+# Ignorer node_modules à tous les niveaux
+**/node_modules/
 
-# Ignorer les fichiers cache
-.cache/
-
-# Autres fichiers inutiles
-*.log
-*.pack
+# Ignorer les fichiers d'environnement 
 .env
+.env.local
+*.env*
+
+# Ignorer les dossiers de cache
+**/.cache/
+*.pack
+
+# Fichiers de logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Fichiers système
+.DS_Store
