@@ -77,6 +77,33 @@ function DepensePage() {
     fetchInitialData();
   }, []);
 
+  // Fonction pour naviguer vers une étape spécifique (depuis le récapitulatif)
+  const handleEdit = (stepIndex) => {
+    // Vérification que l'index d'étape est valide
+    if (stepIndex >= 0 && stepIndex < steps.length - 1) {
+      // Si on est sur une étape de périodicité et que la dépense n'est pas récurrente
+      // et qu'on essaie d'accéder à l'étape de périodicité, ignorer.
+      if (stepIndex === 3 && !depenseData.estRecurrente) {
+        setSnackbar({
+          open: true,
+          message: 'Cette section n\'est pas applicable pour une dépense ponctuelle',
+          severity: 'info'
+        });
+        return;
+      }
+      
+      // Sinon, naviguer vers l'étape demandée
+      setActiveStep(stepIndex);
+      
+      // Afficher un message de confirmation
+      setSnackbar({
+        open: true,
+        message: `Modification de l'étape '${steps[stepIndex]}'`,
+        severity: 'info'
+      });
+    }
+  };
+
   const handleNext = () => {
     // Validation pour l'étape Informations
     if (activeStep === 0) {
@@ -289,6 +316,7 @@ function DepensePage() {
           updateDepenseData={handleDataChange} 
           onImprimer={handleImprimer}
           categories={categories}
+          onEdit={handleEdit}  // Ajout de la prop onEdit
         />;
       default:
         return 'Étape inconnue';

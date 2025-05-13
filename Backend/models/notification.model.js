@@ -1,66 +1,101 @@
+// models/notification.model.js
 const mongoose = require('mongoose');
 
-const notificationSchema = new mongoose.Schema({
-  utilisateur_id: {
+const NotificationSchema = new mongoose.Schema({
+  titre: {
+    type: String,
+    required: [true, 'Le titre de la notification est obligatoire'],
+    trim: true,
+    maxlength: [100, 'Le titre ne peut pas dépasser 100 caractères']
+  },
+  message: {
+    type: String,
+    required: [true, 'Le message de la notification est obligatoire'],
+    trim: true,
+    maxlength: [500, 'Le message ne peut pas dépasser 500 caractères']
+  },
+  type: {
+    type: String,
+    enum: ['INFO', 'AVERTISSEMENT', 'ERREUR', 'SUCCES'],
+    default: 'INFO'
+  },
+  categorie: {
+    type: String,
+    enum: ['DEPENSE', 'PAIEMENT', 'ECHEANCE', 'SYSTEME', 'AUTRE'],
+    default: 'AUTRE'
+  },
+  lien: {
+    type: String,
+    trim: true
+  },
+  canal: {
+    type: String,
+    enum: ['APPLICATION', 'EMAIL', 'SMS'],
+    default: 'APPLICATION'
+  },
+  estLu: {
+    type: Boolean,
+    default: false
+  },
+  dateLecture: {
+    type: Date
+  },
+  destinataireId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  type: {
-    type: String,
-    enum: ['ECHEANCE', 'CAISSE', 'SYSTEME', 'DEPENSE'],
-    required: true
-  },
-  reference_id: {
+  entiteId: {
     type: mongoose.Schema.Types.ObjectId,
-    required: true
+    refPath: 'entiteType'
   },
-  reference_type: {
+  entiteType: {
     type: String,
+    enum: ['Depense', 'Paiement', 'CompteBancaire', null],
+    default: null
+  },
+  entrepriseId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Entreprise',
     required: true
-  },
-  titre: {
-    type: String,
-    required: true
-  },
-  message: {
-    type: String,
-    required: true
-  },
-  date_creation: {
-    type: Date,
-    default: Date.now,
-    required: true
-  },
-  date_lecture: {
-    type: Date
-  },
-  lue: {
-    type: Boolean,
-    default: false
   },
   priorite: {
+    type: Number,
+    min: 1,
+    max: 5,
+    default: 3
+  },
+  programmeePour: {
+    type: Date
+  },
+  statut: {
     type: String,
-    enum: ['NORMALE', 'URGENT', 'CRITIQUE'],
-    default: 'NORMALE'
+    enum: ['EN_ATTENTE', 'ENVOYEE', 'ECHEC'],
+    default: 'EN_ATTENTE'
+  },
+  tentativesEnvoi: {
+    type: Number,
+    default: 0
+  },
+  derniereErreur: {
+    type: String
   }
 }, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
+  timestamps: true
 });
 
-// Marquer comme lue
-notificationSchema.methods.marquerCommeLue = function() {
-  this.lue = true;
-  this.date_lecture = new Date();
+// Indexation pour les performances
+NotificationSchema.index({ destinataireId: 1, estLu: 1 });
+NotificationSchema.index({ entrepriseId: 1, categorie: 1 });
+NotificationSchema.index({ canal: 1, statut: 1 });
+NotificationSchema.index({ programmeePour: 1 }, { sparse: true });
+NotificationSchema.index({ entiteId: 1, entiteType: 1 }, { sparse: true });
+
+// Méthode pour marquer comme lu
+NotificationSchema.methods.marquerCommeLu = function() {
+  this.estLu = true;
+  this.dateLecture = new Date();
   return this.save();
 };
 
-// Index pour optimiser les requêtes de notifications non lues par utilisateur
-notificationSchema.index({ utilisateur_id: 1, lue: 1 });
-
-// Index pour optimiser les recherches par référence
-notificationSchema.index({ reference_id: 1, reference_type: 1 });
-
-module.exports = mongoose.model('Notification', notificationSchema);
+module.exports = mongoose.model('Notification', NotificationSchema, 'notifications');

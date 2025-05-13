@@ -35,6 +35,7 @@ import VentePage from './pages/Vente';
 import ArticlesPage from './pages/Articles';
 import VentesList from './pages/VentesList';
 import AchatPage from './pages/AchatPage';
+import DepensePage from './pages/DepensePage';
 
 // Thème personnalisé
 const theme = createTheme({
@@ -144,6 +145,7 @@ function AppRoutes({ setDirection }) {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/tiers" element={<TiersPage />} />
 		  <Route path="/articles" element={<ArticlesPage />} />
+		  <Route path="/depense" element={<DepensePage />} />
 		  <Route path="/achat" element={<AchatPage />} />
 		  <Route path="/vente" element={<VentePage />} />
 		  <Route path="/ventes" element={<VentesList />} />

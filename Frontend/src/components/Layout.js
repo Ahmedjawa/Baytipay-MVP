@@ -109,6 +109,11 @@ export default function Layout({ setDirection }) {
       icon: <ShoppingCartIcon />, 
       path: '/vente'
     },
+	 { 
+      text: 'Depense', 
+      icon: <ShoppingCartIcon />, 
+      path: '/depense'
+    },
     { text: 'Dossiers', icon: <FolderIcon />, path: '/dossiers' },
     { text: 'Transactions', icon: <PaymentIcon />, path: '/transactions' },
     { text: 'Caisse', icon: <AccountBalanceIcon />, path: '/caisse' },

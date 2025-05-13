@@ -85,6 +85,11 @@ const achatRoutes = require('./routes/achat.routes');
 const caisseRoutes = require('./routes/caisse.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const dataRoutes = require('./routes/data.routes');
+const tiersRoutes = require('./routes/tiers.routes');
+const categorieRoutes = require('./routes/categorie.routes');
+const compteBancaireRoutes = require('./routes/compteBancaire.routes');
+const recurrenceRoutes = require('./routes/recurrence.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 
 // Application des routes
@@ -105,6 +110,11 @@ app.use('/api/achats', achatRoutes);
 app.use('/api/caisse', caisseRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api', dataRoutes);
+app.use('/tiers', tiersRoutes);
+app.use('/categories', categorieRoutes);
+app.use('/comptes', compteBancaireRoutes);
+app.use('/recurrences', recurrenceRoutes);
+app.use('/notifications', notificationRoutes)
 
 
 // Middleware de validation des erreurs

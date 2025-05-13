@@ -1,15 +1,79 @@
 // models/depense.model.js
 const mongoose = require('mongoose');
 
-const DepenseSchema = new mongoose.Schema({
-  categorieId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'CategorieDepense',
-    required: [true, 'La catégorie est obligatoire']
+// Schéma pour les notifications
+const NotificationSchema = new mongoose.Schema({
+  delaiPreAvis: {
+    type: Number,
+    default: 3,
+    min: 0,
+    max: 30
   },
-  tiersId: {
+  canaux: {
+    type: [String],
+    enum: ['APPLICATION', 'EMAIL', 'SMS'],
+    default: ['APPLICATION']
+  },
+  rappels: {
+    type: Boolean,
+    default: false
+  }
+});
+
+// Schéma pour la périodicité
+const PeriodiciteSchema = new mongoose.Schema({
+  frequence: {
+    type: String,
+    enum: ['QUOTIDIENNE', 'HEBDOMADAIRE', 'MENSUELLE', 'TRIMESTRIELLE', 'SEMESTRIELLE', 'ANNUELLE'],
+    required: [true, 'La fréquence est obligatoire']
+  },
+  dateDebut: {
+    type: Date,
+    required: [true, 'La date de début est obligatoire']
+  },
+  dateFin: {
+    type: Date
+  },
+  nombreOccurrences: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  notifications: {
+    type: NotificationSchema,
+    default: () => ({})
+  }
+});
+
+// Schéma pour les justificatifs
+const JustificatifSchema = new mongoose.Schema({
+  nom: {
+    type: String,
+    required: true
+  },
+  chemin: {
+    type: String,
+    required: true
+  },
+  type: {
+    type: String,
+    default: 'image/jpeg'
+  },
+  taille: {
+    type: Number
+  },
+  dateAjout: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+// Schéma principal de dépense
+const DepenseSchema = new mongoose.Schema({
+  categorie: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tiers'
+    ref: 'Categorie',
+    required: [true, 'La catégorie est obligatoire']
   },
   montant: {
     type: Number,
@@ -21,48 +85,60 @@ const DepenseSchema = new mongoose.Schema({
     required: [true, 'La date de dépense est obligatoire'],
     default: Date.now
   },
-  datePaiement: {
-    type: Date
+  beneficiaire: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'tiers'
   },
   description: {
     type: String,
-    required: [true, 'La description est obligatoire'],
     trim: true
   },
-  referencePaiement: {
-    type: String,
-    trim: true
-  },
-  recurrente: {
+  estRecurrente: {
     type: Boolean,
     default: false
   },
-  frequence: {
+  // Periodicité uniquement si estRecurrente === true
+  periodicite: {
+    type: PeriodiciteSchema
+  },
+  // Occurrence parent (si cette dépense est générée depuis une dépense récurrente)
+  occurrenceParent: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Depense'
+  },
+  paiement: {
+    statut: {
+      type: String,
+      enum: ['A_PAYER', 'PAYEE', 'ANNULEE'],
+      default: 'A_PAYER'
+    },
+    modePaiement: {
+      type: String,
+      enum: ['ESPECES', 'CHEQUE', 'EFFET', 'VIREMENT', 'CARTE_BANCAIRE', 'PRELEVEMENT'],
+      default: 'ESPECES'
+    },
+    datePaiement: {
+      type: Date
+    },
+    reference: {
+      type: String,
+      trim: true
+    },
+    banque: {
+      type: String,
+      trim: true
+    }
+  },
+  justificatifs: [JustificatifSchema],
+  notes: {
     type: String,
-    enum: ['QUOTIDIENNE', 'HEBDOMADAIRE', 'MENSUELLE', 'ANNUELLE'],
-    required: function() { return this.recurrente; }
+    trim: true
   },
-  debutRecurrence: {
-    type: Date,
-    required: function() { return this.recurrente; }
-  },
-  finRecurrence: {
-    type: Date
-  },
-  prochaineOccurrence: {
-    type: Date
-  },
-  statut: {
-    type: String,
-    enum: ['EN_COURS', 'PAYEE', 'ANNULEE'],
-    default: 'EN_COURS'
-  },
-  notificationDelai: {
-    type: Number,
-    default: 3, // Nombre de jours avant l'échéance pour notifier
-    min: 0,
-    max: 30
-  },
+  // Pour la gestion des récurrences générées
+  occurrencesGenerees: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Depense'
+  }],
   entrepriseId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Entreprise',
@@ -73,53 +149,22 @@ const DepenseSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  transactionId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Transaction'
+  statut: {
+    type: String,
+    enum: ['ACTIVE', 'ANNULEE', 'ARCHIVEE'],
+    default: 'ACTIVE'
   }
 }, {
   timestamps: true
 });
 
-// Middleware pour calculer la prochaine occurrence lors de l'enregistrement
-DepenseSchema.pre('save', function(next) {
-  if (this.recurrente && (this.isNew || this.isModified('debutRecurrence') || 
-      this.isModified('frequence') || this.isModified('prochaineOccurrence'))) {
-      
-    const aujourdhui = new Date();
-    let prochaine = this.prochaineOccurrence;
-    
-    if (!prochaine || prochaine < aujourdhui) {
-      prochaine = new Date(this.debutRecurrence);
-      
-      while (prochaine < aujourdhui) {
-        switch (this.frequence) {
-          case 'QUOTIDIENNE':
-            prochaine.setDate(prochaine.getDate() + 1);
-            break;
-          case 'HEBDOMADAIRE':
-            prochaine.setDate(prochaine.getDate() + 7);
-            break;
-          case 'MENSUELLE':
-            prochaine.setMonth(prochaine.getMonth() + 1);
-            break;
-          case 'ANNUELLE':
-            prochaine.setFullYear(prochaine.getFullYear() + 1);
-            break;
-        }
-      }
-      
-      this.prochaineOccurrence = prochaine;
-    }
-  }
-  next();
-});
-
-// Index pour améliorer les performances
-DepenseSchema.index({ categorieId: 1 });
-DepenseSchema.index({ tiersId: 1 });
-DepenseSchema.index({ dateDepense: -1 });
-DepenseSchema.index({ recurrente: 1, prochaineOccurrence: 1 });
-DepenseSchema.index({ entrepriseId: 1, statut: 1 });
+// Indexation pour optimiser les performances
+DepenseSchema.index({ entrepriseId: 1, dateDepense: -1 });
+DepenseSchema.index({ beneficiaire: 1 });
+DepenseSchema.index({ categorie: 1 });
+DepenseSchema.index({ estRecurrente: 1 });
+DepenseSchema.index({ 'paiement.statut': 1 });
+DepenseSchema.index({ 'paiement.datePaiement': 1 });
+DepenseSchema.index({ occurrenceParent: 1 });
 
 module.exports = mongoose.model('Depense', DepenseSchema, 'depenses');
