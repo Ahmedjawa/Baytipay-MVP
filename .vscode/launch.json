@@ -1,0 +1,10 @@
+{
+    "configurations": [
+        {
+            "type": "msedge",
+            "name": "https://github.com/Ahmedjawa/Baytipay-MVP",
+            "request": "launch",
+            "url": "https://github.com/Ahmedjawa/Baytipay-MVP"
+        }
+    ]
+}

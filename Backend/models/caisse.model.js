@@ -1,45 +1,61 @@
 const mongoose = require('mongoose');
 
-const mouvementSchema = new mongoose.Schema({
-  type: { type: String, enum: ['entree', 'sortie'], required: true },
-  date: { type: Date, default: Date.now },
-  montant: { type: Number, required: true, min: 0 },
-  description: { type: String, required: true },
-  reference: String,
-  categorie: {
-    type: String,
-    enum: ['vente', 'remboursement', 'depense', 'salaire', 'autre'],
+const caisseSchema = new mongoose.Schema({
+  utilisateur_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
     required: true
   },
-  validePar: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  date_ouverture: {
+    type: Date,
+    required: true,
+    default: Date.now
+  },
+  date_fermeture: {
+    type: Date
+  },
+  solde_initial: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  solde_theorique: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  solde_reel: {
+    type: Number
+  },
+  ecart: {
+    type: Number,
+    default: 0
+  },
+  statut: {
+    type: String,
+    enum: ['OUVERTE', 'FERMEE'],
+    default: 'OUVERTE',
+    required: true
+  }
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
-const caisseSchema = new mongoose.Schema({
-  intitule: { type: String, required: true },
-  dateOuverture: { type: Date, default: Date.now },
-  dateFermeture: Date,
-  soldeInitial: { type: Number, default: 0 },
-  soldeFinal: Number,
-  mouvements: [mouvementSchema],
-  statut: { type: String, enum: ['ouverte', 'fermee'], default: 'ouverte' },
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  notes: String
-}, { timestamps: true });
-
-// Calcul automatique du solde final
+// Calculer l'écart avant sauvegarde
 caisseSchema.pre('save', function(next) {
-  if (this.isModified('mouvements')) {
-    const totalEntrees = this.mouvements
-      .filter(m => m.type === 'entree')
-      .reduce((sum, m) => sum + m.montant, 0);
-    
-    const totalSorties = this.mouvements
-      .filter(m => m.type === 'sortie')
-      .reduce((sum, m) => sum + m.montant, 0);
-    
-    this.soldeFinal = this.soldeInitial + totalEntrees - totalSorties;
+  if (this.solde_reel !== undefined && this.solde_theorique !== undefined) {
+    this.ecart = this.solde_reel - this.solde_theorique;
   }
   next();
+});
+
+// Relation avec les mouvements
+caisseSchema.virtual('mouvements', {
+  ref: 'MouvementCaisse',
+  localField: '_id',
+  foreignField: 'caisse_id'
 });
 
 module.exports = mongoose.model('Caisse', caisseSchema);

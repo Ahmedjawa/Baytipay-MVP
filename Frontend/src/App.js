@@ -11,6 +11,7 @@ import { prefixer } from 'stylis';
 import axios from "axios";
 import config from "./config";
 import apiClient from './utils/apiClient';
+import { useAuth } from './context/AuthContext';
 
 
 // Contexte d'authentification
@@ -20,8 +21,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 // Composants principaux
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
-import ClientsPage from './pages/Clients';
-import FournisseursPage from './pages/Fournisseurs';
+import TiersPage from './pages/Tiers'; // Nouvelle page unifiée pour les tiers
 import DossiersPage from './pages/Dossiers';
 import DossierDetailsPage from './pages/DossierDetails';
 import TransactionsPage from './pages/Transactions';
@@ -31,6 +31,10 @@ import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 import Login from './pages/Login';
 import Register from './pages/Register'; 
+import VentePage from './pages/Vente';
+import ArticlesPage from './pages/Articles';
+import VentesList from './pages/VentesList';
+import AchatPage from './pages/AchatPage';
 
 // Thème personnalisé
 const theme = createTheme({
@@ -121,18 +125,28 @@ function App() {
 
 // Définition des routes
 function AppRoutes({ setDirection }) {
+  const { isAuthenticated } = useAuth(); // Ajouter cette ligne
+
   return (
     <Routes>
+      <Route 
+        path="/" 
+        element={!isAuthenticated ? <Navigate to="/login" /> : <Navigate to="/dashboard" />} 
+      />
       {/* Route publique pour la connexion */}
       <Route path="/login" element={<Login />} />
 	  <Route path="/register" element={<Register />} />
+	  
       
       {/* Routes protégées nécessitant une authentification */}
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout setDirection={setDirection} />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/clients" element={<ClientsPage />} />
-          <Route path="/fournisseurs" element={<FournisseursPage />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/tiers" element={<TiersPage />} />
+		  <Route path="/articles" element={<ArticlesPage />} />
+		  <Route path="/achat" element={<AchatPage />} />
+		  <Route path="/vente" element={<VentePage />} />
+		  <Route path="/ventes" element={<VentesList />} />
           <Route path="/dossiers" element={<DossiersPage />} />
           <Route path="/dossiers/:id" element={<DossierDetailsPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />

@@ -1,79 +1,78 @@
+// models/echeance.model.js
 const mongoose = require('mongoose');
 
 const echeanceSchema = new mongoose.Schema({
-  reference: { 
-    type: String, 
-    required: true,
-    unique: true 
+  transactionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Transaction',
+    required: [true, 'L\'ID de transaction est obligatoire']
   },
-  dossier: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Dossier',
-    required: true 
+  echeancierID: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Echeancier',
+    required: false
   },
-  type: { 
-    type: String, 
-    enum: ['traite', 'cheque', 'virement', 'especes'], 
-    required: true 
+  dateEcheance: {
+    type: Date,
+    required: [true, 'La date d\'échéance est obligatoire']
   },
-  montant: { 
-    type: Number, 
-    required: true,
-    min: 0
+  montant: {
+    type: Number,
+    required: [true, 'Le montant est obligatoire'],
+    min: [0.01, 'Le montant doit être supérieur à 0']
   },
-  dateEmission: { 
-    type: Date, 
-    default: Date.now 
-  },
-  dateEcheance: { 
-    type: Date, 
-    required: true 
-  },
-  statut: { 
-    type: String, 
-    enum: ['en_attente', 'paye', 'impaye', 'annule', 'retard'], 
-    default: 'en_attente' 
-  },
-  modePaiement: {
+  statut: {
     type: String,
-    enum: ['bancaire', 'especes', 'mobile', 'autre'],
+    enum: ['A_RECEVOIR', 'RECU', 'IMPAYE', 'ANNULE','A_PAYER'],
+    default: 'A_RECEVOIR'
+  },
+  reference: {
+    type: String,
+    trim: true
+  },
+  banque: {
+    type: String,
+    trim: true
+  },
+  type: {
+    type: String,
+    enum: ['CHEQUE', 'EFFET', 'VIREMENT', 'ESPECES', 'AUTRE'],
+    default: 'CHEQUE'
+  },
+  dateEncaissement: {
+    type: Date
+  },
+  notes: {
+    type: String
+  },
+  entrepriseId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Entreprise',
     required: true
   },
-  detailsPaiement: {
-    banque: String,
-    numero: String,
-    dateEncaisse: Date,
-    reference: String
-  },
-  notes: String,
-  createdBy: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User' 
-  },
-  historique: [{
-    date: { type: Date, default: Date.now },
-    statut: String,
-    modifiePar: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    commentaire: String
-  }]
-}, { 
-  timestamps: true,
-  toJSON: { virtuals: true } 
+  tiersId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tiers',
+    required: false
+  }
+}, {
+  timestamps: true
 });
 
-// Index pour les requêtes fréquentes
-echeanceSchema.index({ dossier: 1, dateEcheance: 1 });
-echeanceSchema.index({ statut: 1, dateEcheance: 1 });
+// Index pour améliorer les performances
+echeanceSchema.index({ transactionId: 1 });
+echeanceSchema.index({ dateEcheance: 1 });
+echeanceSchema.index({ statut: 1 });
+echeanceSchema.index({ entrepriseId: 1 });
 
-// Middleware pour l'historique
+// Middleware pre-save pour générer automatiquement une référence si non spécifiée
 echeanceSchema.pre('save', function(next) {
-  if (this.isModified('statut')) {
-    this.historique.push({
-      statut: this.statut,
-      modifiePar: this._updatedBy || this.createdBy
-    });
+  if (!this.reference) {
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const randomStr = Math.floor(1000 + Math.random() * 9000).toString();
+    this.reference = `ECH-${dateStr}-${randomStr}`;
   }
   next();
 });
 
-module.exports = mongoose.model('Echeance', echeanceSchema);
+module.exports = mongoose.model('Echeance', echeanceSchema, 'echeances');

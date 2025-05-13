@@ -15,101 +15,131 @@ if (!process.env.JWT_SECRET || !process.env.MONGODB_URI) {
 // Initialisation de l'application
 const app = express();
 
-// Middlewares
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`, {
-    body: req.body,
-    headers: req.headers,
-    query: req.query
-  });
-  next();
-});
-
-app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173'], // Inclure tous les domaines frontend
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+// Configuration CORS avancée
+const corsOptions = {
+  origin: ['http://localhost:3000', 'http://localhost:5173'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'x-access-token'
+  ],
   credentials: true,
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
+  maxAge: 86400
+};
+
+// Middlewares dans le bon ordre
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Gestion globale des pré-requêtes OPTIONS
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/api/auth', authRoutes);
+
+// Middleware de logging simplifié
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
 
 // Connexion MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB connecté avec succès'))
   .catch(err => console.error('❌ Erreur MongoDB :', err));
-
-
+  
+  
 
 // Import des modèles
-const User =require('./models/user.model');
-require('./models/dossier.model');
+require('./models/user.model');
+require('./models/article.model');
+require('./models/contact.model');
+require('./models/document.model');
 require('./models/echeance.model');
+require('./models/echeancier.model');
+require('./models/entreprise.model');
+require('./models/facture.model');
+require('./models/ligneTransaction.model');
+require('./models/paiement.model');
+require('./models/remise.model');
+require('./models/tiers.model');
 require('./models/transaction.model');
+require('./models/vente.model');
+require('./models/achat.model');
 require('./models/caisse.model');
-require('./models/documentOCR.model');
 require('./models/notification.model');
-require('./models/client.model');
-require('./models/fournisseur.model');
-
-
 
 // Routes
-app.use('/api/auth', require('./routes/auth.routes'));
-app.use('/api/clients', require('./routes/client.routes'));
-app.use('/api/fournisseur', require('./routes/fournisseur.routes'));
-app.use('/api/users', require('./routes/user.routes'));
-app.use('/api/dashboard', require('./routes/dashboard.routes'));
-app.use('/api/dossiers', require('./routes/dossier.routes'));
-app.use('/api/echeances', require('./routes/echeance.routes'));
-app.use('/api/transactions', require('./routes/transaction.routes'));
-app.use('/api/caisse', require('./routes/caisse.routes'));
-app.use('/api/ai', require('./routes/ai.routes'));
-//app.use('/api/ai', require('./routes/test.routes'));
+const userRoutes = require('./routes/user.routes');
+const articleRoutes = require('./routes/article.routes');
+const tierRoutes = require('./routes/tiers.routes');
+const documentRoutes = require('./routes/document.routes');
+const echeanceRoutes = require('./routes/echeance.routes');
+const echeancierRoutes = require('./routes/echeancier.routes');
+const entrepriseRoutes = require('./routes/entreprise.route');
+const factureRoutes = require('./routes/facture.routes');
+const paiementRoutes = require('./routes/paiement.routes');
+const remiseRoutes = require('./routes/remise.routes');
+const transactionRoutes = require('./routes/transaction.routes');
+const venteRoutes = require('./routes/vente.routes');
+const achatRoutes = require('./routes/achat.routes');
+const caisseRoutes = require('./routes/caisse.routes');
+const dashboardRoutes = require('./routes/dashboard.routes');
+const dataRoutes = require('./routes/data.routes');
 
-// Validation des erreurs
+
+// Application des routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/articles', articleRoutes);
+app.use('/api/tiers', tierRoutes);
+app.use('/api/documents', documentRoutes);
+app.use('/api/echeances', echeanceRoutes);
+app.use('/api/echeanciers', echeancierRoutes);
+app.use('/api/entreprises', entrepriseRoutes);
+app.use('/api/factures', factureRoutes);
+app.use('/api/paiements', paiementRoutes);
+app.use('/api/remises', remiseRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/ventes', venteRoutes);
+app.use('/api/achats', achatRoutes);
+app.use('/api/caisse', caisseRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api', dataRoutes);
+
+
+// Middleware de validation des erreurs
 app.use(errors());
 
-// Middleware d'erreur
+// Middleware de gestion d'erreurs global
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    message: err.message || 'Internal Server Error',
+  console.error('[ERROR]', err.stack);
+  res.status(err.statusCode || 500).json({
+    success: false,
+    message: err.message || 'Erreur interne du serveur',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
-
-
-
-// Route protégée qui nécessite authentification
-app.get('/api/profile', authMiddleware, async (req, res) => {
-  try {
-    // req.user est déjà rempli par le middleware auth
-    res.send({ 
-      success: true, 
-      user: { 
-        id: req.user._id, 
-        email: req.user.email, 
-        nom: req.user.nom, 
-        prenom: req.user.prenom 
-      } 
-    });
-  } catch (error) {
-    res.status(500).send({ success: false, message: 'Erreur lors de la récupération du profil' });
-  }
+// Routes protégées
+app.get('/api/profile', authMiddleware, (req, res) => {
+  res.json({
+    success: true,
+    user: {
+      id: req.user._id,
+      email: req.user.email,
+      nom: req.user.nom,
+      prenom: req.user.prenom
+    }
+  });
 });
 
-// Route pour vérifier la validité du token
 app.get('/api/verify-token', authMiddleware, (req, res) => {
-  res.status(200).send({ valid: true });
+  res.json({ valid: true });
 });
 
 // Démarrage du serveur
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+  console.log(`⚙️  Environnement: ${process.env.NODE_ENV || 'development'}`);
 });

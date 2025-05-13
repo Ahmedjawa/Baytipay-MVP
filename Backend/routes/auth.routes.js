@@ -1,28 +1,15 @@
+// server/routes/auth.routes.js
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/auth.controller');
+const authMiddleware = require('../middlewares/auth');
 
-// Middleware de validation
-const { check } = require('express-validator');
+// Routes publiques
+router.post('/login', authController.login);
+router.post('/register', authController.register);
 
-// Route d'inscription
-router.post('/register', 
-  [
-    check('email').isEmail().normalizeEmail(),
-    check('password').isLength({ min: 8 }),
-    check('nom').not().isEmpty(),
-    check('prenom').not().isEmpty()
-  ],
-  authController.register
-);
-
-// Route de connexion
-router.post('/login',
-  [
-    check('email').isEmail().normalizeEmail(),
-    check('password').exists()
-  ],
-  authController.login
-);
+// Routes protégées nécessitant authentification
+router.get('/verify', authMiddleware, authController.verifyToken);
+router.get('/profile', authMiddleware, authController.getProfile);
 
 module.exports = router;

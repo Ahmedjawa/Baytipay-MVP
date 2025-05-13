@@ -1,5 +1,5 @@
-// client/src/pages/Register.js amélioré
-import React, { useState } from 'react';
+// client/src/pages/Register.js
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   Box, 
@@ -12,25 +12,52 @@ import {
   Alert,
   CircularProgress,
   Snackbar,
-  IconButton
+  IconButton,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+  FormHelperText
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { register } from '../auth';
 import { useAuth } from '../context/AuthContext';
+import apiClient from '../utils/apiClient';
 
 const Register = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     nom: '',
-    prenom: ''
+    prenom: '',
+    entrepriseId: ''
   });
   const [errors, setErrors] = useState({});
   const [errorMessage, setErrorMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSnackbar, setShowSnackbar] = useState(false);
+  const [entreprises, setEntreprises] = useState([]);
+  const [loadingEntreprises, setLoadingEntreprises] = useState(false);
   const navigate = useNavigate();
   const { setIsAuthenticated } = useAuth();
+
+  useEffect(() => {
+    const fetchEntreprises = async () => {
+      setLoadingEntreprises(true);
+      try {
+        const response = await apiClient.get('/api/entreprises');
+        if (response.data.success) {
+          setEntreprises(response.data.entreprises || []);
+        }
+      } catch (err) {
+        console.error("Erreur lors du chargement des entreprises:", err);
+        setErrorMessage("Impossible de charger la liste des entreprises");
+      } finally {
+        setLoadingEntreprises(false);
+      }
+    };
+    fetchEntreprises();
+  }, []);
 
   const validateForm = () => {
     const newErrors = {};
@@ -55,6 +82,10 @@ const Register = () => {
       newErrors.prenom = 'Le prénom est requis';
     }
     
+    if (!formData.entrepriseId) {
+      newErrors.entrepriseId = 'Veuillez sélectionner une entreprise';
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -62,8 +93,6 @@ const Register = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Effacer l'erreur du champ modifié
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: undefined }));
     }
@@ -72,31 +101,54 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
     
     setErrorMessage('');
     setLoading(true);
     
     try {
-      console.log("Envoi des données d'inscription:", formData);
       const response = await register(formData);
       
       if (response.success) {
         setShowSnackbar(true);
         setIsAuthenticated(true);
-        
-        // Redirection après un court délai pour permettre à l'utilisateur de voir le message de succès
-        setTimeout(() => {
-          navigate('/');
-        }, 1500);
+        setTimeout(() => navigate('/'), 1500);
       } else {
         setErrorMessage(response.message || 'Erreur lors de l\'inscription');
       }
     } catch (err) {
-      console.error("Erreur complète:", err);
+      console.error("Erreur:", err);
       setErrorMessage(err.message || 'Erreur de connexion au serveur');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateDemoEntreprise = async () => {
+    try {
+      setLoading(true);
+      const demoEntreprise = {
+        nom: 'Entreprise démo',
+        formeJuridique: 'SARL',
+        siren: '123456789',
+        adresse: {
+          rue: '1 rue de la Démonstration',
+          codePostal: '75000',
+          ville: 'Paris',
+          pays: 'France'
+        }
+      };
+      
+      const response = await apiClient.post('/api/entreprises', demoEntreprise);
+      
+      if (response.data.success) {
+        setEntreprises([...entreprises, response.data.entreprise]);
+        setFormData({...formData, entrepriseId: response.data.entreprise._id});
+        setShowSnackbar(true);
+      }
+    } catch (err) {
+      console.error("Erreur:", err);
+      setErrorMessage('Erreur lors de la création de l\'entreprise démo');
     } finally {
       setLoading(false);
     }
@@ -126,7 +178,6 @@ const Register = () => {
                 label="Nom"
                 value={formData.nom}
                 onChange={handleChange}
-                disabled={loading}
                 error={Boolean(errors.nom)}
                 helperText={errors.nom}
               />
@@ -139,7 +190,6 @@ const Register = () => {
                 label="Prénom"
                 value={formData.prenom}
                 onChange={handleChange}
-                disabled={loading}
                 error={Boolean(errors.prenom)}
                 helperText={errors.prenom}
               />
@@ -153,7 +203,6 @@ const Register = () => {
                 type="email"
                 value={formData.email}
                 onChange={handleChange}
-                disabled={loading}
                 error={Boolean(errors.email)}
                 helperText={errors.email}
               />
@@ -167,10 +216,46 @@ const Register = () => {
                 type="password"
                 value={formData.password}
                 onChange={handleChange}
-                disabled={loading}
                 error={Boolean(errors.password)}
                 helperText={errors.password || 'Minimum 8 caractères'}
               />
+
+              <FormControl 
+                fullWidth 
+                margin="normal"
+                error={Boolean(errors.entrepriseId)}
+                disabled={loading || loadingEntreprises}
+              >
+                <InputLabel>Entreprise *</InputLabel>
+                <Select
+                  name="entrepriseId"
+                  value={formData.entrepriseId}
+                  onChange={handleChange}
+                  label="Entreprise *"
+                >
+                  {entreprises.map(entreprise => (
+                    <MenuItem key={entreprise._id} value={entreprise._id}>
+                      {entreprise.nom}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {errors.entrepriseId && <FormHelperText>{errors.entrepriseId}</FormHelperText>}
+                
+                {entreprises.length === 0 && !loadingEntreprises && (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Aucune entreprise disponible.
+                    </Typography>
+                    <Button 
+                      size="small" 
+                      onClick={handleCreateDemoEntreprise}
+                      disabled={loading}
+                    >
+                      Créer une entreprise démo
+                    </Button>
+                  </Box>
+                )}
+              </FormControl>
 
               <Button
                 type="submit"
@@ -179,7 +264,7 @@ const Register = () => {
                 sx={{ mt: 3, mb: 2, py: 1.5 }}
                 disabled={loading}
               >
-                {loading ? <CircularProgress size={24} color="inherit" /> : 'S\'inscrire'}
+                {loading ? <CircularProgress size={24} /> : 'S\'inscrire'}
               </Button>
 
               <Typography variant="body2" align="center">
@@ -199,7 +284,7 @@ const Register = () => {
         onClose={() => setShowSnackbar(false)}
         message="Compte créé avec succès!"
         action={
-          <IconButton size="small" color="inherit" onClick={() => setShowSnackbar(false)}>
+          <IconButton size="small" onClick={() => setShowSnackbar(false)}>
             <CloseIcon fontSize="small" />
           </IconButton>
         }

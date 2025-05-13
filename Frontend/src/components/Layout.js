@@ -19,9 +19,13 @@ import {
   Notifications as NotificationsIcon,
   Translate as TranslateIcon,
   ChevronLeft as ChevronLeftIcon,
-  Logout as LogoutIcon
+  Logout as LogoutIcon,
+  Business as BusinessIcon,
+  Inventory as InventoryIcon
 } from '@mui/icons-material';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { useAuth } from '../context/AuthContext'; // Import du contexte d'authentification
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 
 // Largeur du drawer
 const drawerWidth = 240;
@@ -35,6 +39,7 @@ export default function Layout({ setDirection }) {
   const [open, setOpen] = useState(true);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [anchorElLang, setAnchorElLang] = useState(null);
+  const [anchorElTiers, setAnchorElTiers] = useState(null);
   
   // Gestion du menu utilisateur
   const handleOpenUserMenu = (event) => {
@@ -52,6 +57,15 @@ export default function Layout({ setDirection }) {
   
   const handleCloseLangMenu = () => {
     setAnchorElLang(null);
+  };
+  
+  // Gestion du sous-menu Tiers
+  const handleOpenTiersMenu = (event) => {
+    setAnchorElTiers(event.currentTarget);
+  };
+  
+  const handleCloseTiersMenu = () => {
+    setAnchorElTiers(null);
   };
   
   // Changement de langue et direction
@@ -74,13 +88,38 @@ export default function Layout({ setDirection }) {
   // Éléments du menu principal
   const menuItems = [
     { text: 'Tableau de bord', icon: <DashboardIcon />, path: '/' },
-    { text: 'Clients', icon: <PeopleIcon />, path: '/clients' },
-    { text: 'Fournisseurs', icon: <PeopleIcon />, path: '/fournisseurs' },
+    { 
+      text: 'Tiers', 
+      icon: <BusinessIcon />, 
+     path: '/tiers'
+    },
+    { 
+      text: 'Articles', 
+      icon: <InventoryIcon />, 
+      path: '/articles'
+    },
+	{ 
+    text: 'Achat', 
+    icon: <LocalShippingIcon />, 
+    path: '/achat'
+  },
+	
+    { 
+      text: 'Vente', 
+      icon: <ShoppingCartIcon />, 
+      path: '/vente'
+    },
     { text: 'Dossiers', icon: <FolderIcon />, path: '/dossiers' },
     { text: 'Transactions', icon: <PaymentIcon />, path: '/transactions' },
     { text: 'Caisse', icon: <AccountBalanceIcon />, path: '/caisse' },
     { text: 'Assistant IA', icon: <ChatIcon />, path: '/chatbot' },
     { text: 'Paramètres', icon: <SettingsIcon />, path: '/settings' },
+  ];
+  
+  // Sous-menu pour les tiers
+  const tiersSubMenuItems = [
+    { text: 'Liste des tiers', path: '/tiers' },
+    { text: 'Ajouter un tiers', path: '/tiers/nouveau' },
   ];
   
   return (
@@ -170,7 +209,6 @@ export default function Layout({ setDirection }) {
               </ListItemIcon>
               <Typography textAlign="center">Profil</Typography>
             </MenuItem>
-            {/* Modification: ajout de la fonction handleLogout */}
             <MenuItem onClick={handleLogout}>
               <ListItemIcon>
                 <LogoutIcon fontSize="small" />
@@ -201,8 +239,8 @@ export default function Layout({ setDirection }) {
               <ListItem 
                 button 
                 key={item.text}
-                onClick={() => navigate(item.path)}
-                selected={location.pathname === item.path}
+                onClick={item.hasSubmenu ? item.onClick : () => navigate(item.path)}
+                selected={!item.hasSubmenu && location.pathname === item.path}
               >
                 <ListItemIcon>
                   {item.icon}
@@ -210,6 +248,25 @@ export default function Layout({ setDirection }) {
                 <ListItemText primary={item.text} />
               </ListItem>
             ))}
+            {/* Menu contextuel pour les tiers */}
+            <Menu
+              anchorEl={anchorElTiers}
+              open={Boolean(anchorElTiers)}
+              onClose={handleCloseTiersMenu}
+              sx={{ ml: 2 }}
+            >
+              {tiersSubMenuItems.map((item) => (
+                <MenuItem 
+                  key={item.text} 
+                  onClick={() => {
+                    navigate(item.path);
+                    handleCloseTiersMenu();
+                  }}
+                >
+                  {item.text}
+                </MenuItem>
+              ))}
+            </Menu>
           </List>
           <Divider sx={{ my: 2 }} />
         </Box>
@@ -219,7 +276,7 @@ export default function Layout({ setDirection }) {
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
         <Container maxWidth="xl">
-          <Outlet /> {/* Modification: remplacé children par Outlet pour React Router v6 */}
+          <Outlet />
         </Container>
       </Box>
     </Box>

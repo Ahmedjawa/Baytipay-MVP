@@ -1,53 +1,108 @@
+// models/transaction.model.js
 const mongoose = require('mongoose');
 
-const transactionSchema = new mongoose.Schema({
-  reference: { type: String, required: true, unique: true },
-  dossier: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Dossier',
-    required: true 
-  },
-  type: { 
-    type: String, 
-    enum: ['debit', 'credit'], 
-    required: true 
-  },
-  categorie: {
+const TransactionSchema = new mongoose.Schema({
+  type: {
     type: String,
-    enum: ['salaires', 'loyer', 'fournitures', 'service', 'autre'],
-    required: true
+    enum: ['VENTE', 'ACHAT', 'DEPENSE'],
+    required: [true, 'Le type de transaction est obligatoire']
   },
-  montant: { type: Number, required: true, min: 0 },
-  dateTransaction: { type: Date, default: Date.now },
-  modePaiement: {
+  tiersId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tiers',
+    required: function() { return this.type !== 'DEPENSE'; }
+  },
+  numeroTransaction: {
     type: String,
-    enum: ['cheque', 'virement', 'especes', 'carte'],
-    required: true
+    unique: true,
+    required: [true, 'Le numéro de transaction est obligatoire']
   },
-  details: {
-    numeroCheque: String,
-    banque: String,
-    reference: String
+  dateTransaction: {
+    type: Date,
+    default: Date.now,
+    required: [true, 'La date de transaction est obligatoire']
   },
-  notes: String,
+  montantTotalHT: {
+    type: Number,
+    required: [true, 'Le montant HT est obligatoire'],
+    min: [0, 'Le montant doit être positif']
+  },
+  montantTotalTTC: {
+    type: Number,
+    required: [true, 'Le montant TTC est obligatoire'],
+    min: [0, 'Le montant doit être positif']
+  },
+  montantTaxes: {
+    type: Number,
+    default: 0,
+    min: [0, 'Le montant des taxes doit être positif']
+  },
+  statut: {
+    type: String,
+    enum: ['BROUILLON', 'VALIDEE', 'ANNULEE'],
+    default: 'BROUILLON'
+  },
+  reference: {
+    type: String,
+    trim: true
+  },
   piecesJointes: [{
-    nom: String,
-    url: String,
+  type: String // Stockage des URLs des scans
+}],
+typeDocument: {
+  type: String,
+  enum: ['FACTURE', 'BON_COMMANDE', 'AVOIR'],
+  default: 'FACTURE'
+},
+  notes: {
     type: String
-  }],
-  createdBy: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User' 
   },
-  recurrence: {
-    active: { type: Boolean, default: false },
-    frequence: { type: String, enum: ['mensuelle', 'trimestrielle', 'annuelle'] },
-    dateFin: Date
+  entrepriseId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Entreprise',
+    required: true
+  },
+  creePar: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   }
-}, { timestamps: true });
+}, {
+  timestamps: true
+});
 
-// Index pour les rapports
-transactionSchema.index({ dossier: 1, dateTransaction: 1 });
-transactionSchema.index({ categorie: 1, type: 1 });
+// Fonction pour générer un numéro de transaction unique
+TransactionSchema.statics.generateNumeroTransaction = async function(type, entrepriseId) {
+  const date = new Date();
+  const annee = date.getFullYear().toString().substr(-2);
+  const mois = (date.getMonth() + 1).toString().padStart(2, '0');
+  
+  const prefix = type === 'VENTE' ? 'V' : type === 'ACHAT' ? 'A' : 'D';
+  
+  // Récupérer le dernier numéro de transaction pour ce type
+  const dernierTransaction = await this.findOne(
+    { type, entrepriseId },
+    { numeroTransaction: 1 },
+    { sort: { 'numeroTransaction': -1 } }
+  );
+  
+  let sequence = 1;
+  
+  if (dernierTransaction && dernierTransaction.numeroTransaction) {
+    // Extraire la séquence du dernier numéro
+    const match = dernierTransaction.numeroTransaction.match(/(\d+)$/);
+    if (match) {
+      sequence = parseInt(match[1], 10) + 1;
+    }
+  }
+  
+  // Format: V/A/D-AAMM-XXXX (où XXXX est la séquence)
+  return `${prefix}-${annee}${mois}-${sequence.toString().padStart(4, '0')}`;
+};
 
-module.exports = mongoose.model('Transaction', transactionSchema);
+// Index pour améliorer les performances
+TransactionSchema.index({ type: 1, dateTransaction: -1 });
+TransactionSchema.index({ tiersId: 1 });
+TransactionSchema.index({ entrepriseId: 1, statut: 1 });
+
+module.exports = mongoose.model('Transaction', TransactionSchema, 'transactions');

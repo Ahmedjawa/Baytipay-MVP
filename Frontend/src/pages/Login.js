@@ -29,32 +29,31 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { setIsAuthenticated } = useAuth();
+  const { login } = useAuth();
 
   const handleClickShowPassword = () => setShowPassword(!showPassword);
   
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    
-    try {
-      const response = await login({ email, password });
-      
-      if (response.success) {
-        setAuthToken(response.token);
-        setIsAuthenticated(true);
-        navigate('/');
-      } else {
-        setError(response.message || 'Échec de connexion. Veuillez vérifier vos identifiants.');
-      }
-    } catch (err) {
-      setError('Erreur de connexion au serveur.');
-      console.error(err);
-    } finally {
-      setLoading(false);
+  e.preventDefault();
+  setError('');
+  setLoading(true);
+
+  try {
+    const response = await login({ email, password });
+
+    if (response.success) {
+      navigate('/dashboard');
+    } else {
+      setError(response.message || 'Échec de connexion. Veuillez vérifier vos identifiants.');
     }
-  };
+  } catch (err) {
+    setError('Erreur de connexion au serveur.');
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <Container component="main" maxWidth="xs" sx={{ height: '100vh', display: 'flex', alignItems: 'center' }}>
