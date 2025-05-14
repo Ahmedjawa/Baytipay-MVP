@@ -84,9 +84,14 @@ function PaiementStep({ depenseData, updateDepenseData }) {
                 label="Date de paiement"
                 value={depenseData.paiement.datePaiement}
                 onChange={handleDatePaiementChange}
-                slotProps={{
-                  textField: { fullWidth: true, required: true }
-                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    fullWidth
+                    required
+                    size="small"
+                  />
+                )}
               />
             </LocalizationProvider>
           </Grid>

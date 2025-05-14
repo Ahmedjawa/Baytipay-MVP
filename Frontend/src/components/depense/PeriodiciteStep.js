@@ -158,9 +158,14 @@ function PeriodiciteStep({ depenseData, updateDepenseData }) {
               label="Date de début"
               value={depenseData.periodicite.dateDebut}
               onChange={handleDateChange('dateDebut')}
-              slotProps={{
-                textField: { fullWidth: true, required: true }
-              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  fullWidth
+                  required
+                  size="small"
+                />
+              )}
             />
           </LocalizationProvider>
         </Grid>
@@ -189,9 +194,14 @@ function PeriodiciteStep({ depenseData, updateDepenseData }) {
                 label="Date de fin"
                 value={depenseData.periodicite.dateFin}
                 onChange={handleDateChange('dateFin')}
-                slotProps={{
-                  textField: { fullWidth: true, required: true }
-                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    fullWidth
+                    required
+                    size="small"
+                  />
+                )}
               />
             </LocalizationProvider>
           </Grid>

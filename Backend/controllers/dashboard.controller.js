@@ -3,14 +3,30 @@ const MouvementCaisse = require('../models/caisse.model');
 
 exports.getSummary = async (req, res) => {
     try {
-        const { debut, fin } = req.query;
+        const { dateDebut, dateFin } = req.query;
 
-        const dateDebut = debut ? new Date(debut) : new Date(); // par défaut : aujourd'hui
-        const dateFin = fin ? new Date(fin) : new Date();
+        if (!dateDebut || !dateFin) {
+            return res.status(400).json({
+                success: false,
+                message: 'Les dates de début et de fin sont requises'
+            });
+        }
+
+        // Convertir les dates en objets Date
+        const debut = new Date(dateDebut);
+        const fin = new Date(dateFin);
+
+        if (isNaN(debut.getTime()) || isNaN(fin.getTime())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Format de date invalide'
+            });
+        }
 
         // 1. Récupérer les échéances dans la période sélectionnée
         const echeances = await Dossier.find({
-            dateEcheance: { $gte: dateDebut, $lte: dateFin }
+            dateEcheance: { $gte: debut, $lte: fin },
+            entrepriseId: req.user.entrepriseId
         });
 
         const totalMontant = echeances.reduce((sum, e) => sum + e.montant, 0);

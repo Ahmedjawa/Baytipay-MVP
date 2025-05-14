@@ -76,10 +76,14 @@ function InformationsStep({ depenseData, updateDepenseData, categories, benefici
               label="Date de la dépense"
               value={depenseData.dateDepense}
               onChange={handleDateChange}
-              renderInput={(params) => <TextField {...params} fullWidth required />}
-              slotProps={{
-                textField: { fullWidth: true, required: true }
-              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  fullWidth
+                  required
+                  size="small"
+                />
+              )}
             />
           </LocalizationProvider>
         </Grid>

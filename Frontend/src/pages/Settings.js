@@ -1,359 +1,218 @@
-import React, { useEffect, useState } from 'react';
+// Settings.js (version corrigée)
+import React, { useState, useEffect } from 'react';
 import { 
-  Box, Typography, TextField, Button, Snackbar, Alert, 
-  FormControl, InputLabel, Select, MenuItem, Grid, Paper, 
-  Divider, CircularProgress, Avatar, IconButton, Chip // Chip ajouté ici
+  Box, Typography, Snackbar, Alert, Tabs, Tab, Paper, CircularProgress,
+  Button 
 } from '@mui/material';
-import { 
-  Save, Business, Edit, Email, Phone, LocationOn, 
-  VerifiedUser, CorporateFare, CloudUpload, CheckCircleOutline, ErrorOutline // Icônes ajoutées
-} from '@mui/icons-material';
+import { Refresh } from '@mui/icons-material';
+import EntrepriseSettings from '../components/EntrepriseSettings';
+import CategorySettings from '../components/CategorySettings';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../utils/apiClient';
+import { useNavigate } from 'react-router-dom';
 
 export default function Settings() {
-  const { user } = useAuth();
-  const [entreprise, setEntreprise] = useState(null);
-  const [formData, setFormData] = useState({
-    nom: '',
-    formeJuridique: 'SARL',
-    numeroFiscal: '',
-    adresse: '',
-    telephone: '',
-    email: '',
-    logoUrl: ''
-  });
-  const [formErrors, setFormErrors] = useState({});
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState(0);
   const [snackbar, setSnackbar] = useState({ 
     open: false, 
     message: '', 
     severity: 'success' 
   });
   const [loading, setLoading] = useState(true);
-  const [logoPreview, setLogoPreview] = useState('');
+  const [userData, setUserData] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-  const fetchEntreprise = async () => {
-    try {
-      const response = await apiClient.get('/api/settings');
-      setEntreprise(response.data);
-      setFormData(response.data || { // Gérer le cas null
-        nom: '',
-        formeJuridique: 'SARL',
-        numeroFiscal: '',
-        adresse: '',
-        telephone: '',
-        email: '',
-        logoUrl: ''
-      });
-    } catch (error) {
-      // Initialiser même en cas d'erreur
-      setFormData({ 
-        nom: '',
-        formeJuridique: 'SARL',
-        numeroFiscal: '',
-        adresse: '',
-        telephone: '',
-        email: '',
-        logoUrl: ''
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-  fetchEntreprise();
-}, [user]);
-
-  const validateForm = () => {
-    const errors = {};
-    const requiredFields = ['nom', 'formeJuridique', 'numeroFiscal', 'adresse', 'telephone', 'email'];
-    
-    requiredFields.forEach(field => {
-      if (!formData[field]?.trim()) {
-        errors[field] = "Ce champ est obligatoire";
+    // Récupérer les informations de l'utilisateur si nécessaire
+    const fetchUserData = async () => {
+      if (!user) {
+        setError("Vous n'êtes pas connecté. Veuillez vous connecter pour accéder aux paramètres.");
+        setLoading(false);
+        return;
       }
-    });
 
-    if (!/^[0-9]{8}$/.test(formData.telephone)) {
-      errors.telephone = "Numéro invalide (8 chiffres)";
-    }
+      try {
+        console.log('Données utilisateur du contexte:', user);
+        
+        // Vérifier si nous avons déjà toutes les données nécessaires
+        if (user._id && user.entrepriseId) {
+          setUserData(user);
+          setLoading(false);
+          return;
+        }
 
-    if (!/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(formData.email)) {
-      errors.email = "Format d'email invalide";
-    }
+        // Sinon, récupérer les données utilisateur depuis l'API
+        const response = await apiClient.get('/api/auth/verify');
+        
+        if (response.data && response.data.success) {
+          const updatedUser = response.data.user;
+          
+          // Vérifier que nous avons bien reçu les données requises
+          if (!updatedUser._id || !updatedUser.entrepriseId) {
+            setError("Votre compte n'est pas associé à une entreprise. Veuillez contacter l'administrateur.");
+            setLoading(false);
+            return;
+          }
+          
+          setUserData(updatedUser);
+        } else {
+          setError("Impossible de récupérer vos informations. Veuillez vous reconnecter.");
+        }
+      } catch (error) {
+        console.error('Erreur lors de la récupération des informations utilisateur:', error);
+        
+        // Gestion spécifique selon le code d'erreur
+        if (error.response?.status === 401) {
+          setError("Votre session a expiré. Veuillez vous reconnecter.");
+        } else if (error.response?.status === 404) {
+          setError("Utilisateur ou entreprise introuvable. Veuillez contacter l'administrateur.");
+        } else {
+          setError(`Erreur de communication avec le serveur: ${error.message}`);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    if (!/^[0-9A-Z]{8,15}$/.test(formData.numeroFiscal)) {
-      errors.numeroFiscal = "Format invalide (8-15 caractères alphanumériques)";
-    }
+    fetchUserData();
+  }, [user]);
 
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+  const handleSnackbarClose = () => {
+    setSnackbar(prev => ({ ...prev, open: false }));
   };
 
-  const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!validateForm()) return;
-
-  try {
-    const method = entreprise ? 'put' : 'post';
-    const response = await apiClient[method]('/api/settings', formData);
-    
-    setEntreprise(response.data);
-    setSnackbar({
-      open: true,
-      message: entreprise 
-        ? "Entreprise mise à jour avec succès" 
-        : "Entreprise créée avec succès",
-      severity: "success"
-    });
-
-  } catch (error) {
-      console.error('Erreur lors de la mise à jour:', error);
-      setSnackbar({ 
-        open: true, 
-        message: error.response?.data?.message || "Erreur lors de l'enregistrement", 
-        severity: "error" 
-      });
-    }
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
   };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (formErrors[name]) setFormErrors(prev => ({ ...prev, [name]: null }));
+  
+  const handleRefresh = () => {
+    setLoading(true);
+    setError(null);
+    // Retenter la récupération des données
+    apiClient.get('/api/auth/verify')
+      .then(response => {
+        if (response.data && response.data.success) {
+          setUserData(response.data.user);
+          setSnackbar({
+            open: true,
+            message: 'Informations utilisateur actualisées',
+            severity: 'success'
+          });
+        } else {
+          throw new Error('Échec de l\'actualisation');
+        }
+      })
+      .catch(err => {
+        console.error('Erreur lors de l\'actualisation:', err);
+        setError('Impossible de récupérer vos informations. Veuillez vous reconnecter.');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
-
-  const handleLogoUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    try {
-      const formData = new FormData();
-      formData.append('logo', file);
-
-      const response = await apiClient.post(
-        `/api/settings/${user.entrepriseId}/logo`,
-        formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
-      );
-
-      setFormData(prev => ({ ...prev, logoUrl: response.data.logoUrl }));
-      setLogoPreview(URL.createObjectURL(file));
-      setSnackbar({
-        open: true,
-        message: "Logo mis à jour avec succès",
-        severity: "success"
-      });
-    } catch (error) {
-      setSnackbar({
-        open: true,
-        message: "Échec de l'upload du logo",
-        severity: "error"
-      });
-    }
+  
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
   };
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
         <CircularProgress />
       </Box>
     );
   }
 
+  // Afficher l'écran d'erreur avec des options
+  if (error || !userData || !userData._id || !userData.entrepriseId) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h4" gutterBottom>
+          Paramètres
+        </Typography>
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error || "Impossible d'accéder aux paramètres. Veuillez vous reconnecter ou contacter l'administrateur."}
+        </Alert>
+        
+        <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+          <Button 
+            variant="contained" 
+            color="primary"
+            startIcon={<Refresh />}
+            onClick={handleRefresh}
+          >
+            Actualiser
+          </Button>
+          
+          <Button 
+            variant="outlined"
+            onClick={handleLogout}
+          >
+            Se déconnecter
+          </Button>
+        </Box>
+        
+        {userData && (
+          <Paper sx={{ mt: 3, p: 2, bgcolor: '#f5f5f5' }}>
+            <Typography variant="subtitle1">Informations utilisateur détectées:</Typography>
+            <Box component="pre" sx={{ mt: 1, p: 1, bgcolor: '#eaeaea', borderRadius: 1, overflow: 'auto' }}>
+              {JSON.stringify({
+                userId: userData._id || "Non défini",
+                entrepriseId: userData.entrepriseId || "Non défini",
+                email: userData.email || "Non défini"
+              }, null, 2)}
+            </Box>
+          </Paper>
+        )}
+      </Box>
+    );
+  }
+
   return (
-    <Box sx={{ p: 4, maxWidth: 1000, margin: '0 auto' }}>
-      <Typography variant="h4" gutterBottom sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 2,
-        color: 'primary.main'
-      }}>
-        <Business fontSize="large" /> 
-        Paramètres de l'entreprise
-        <Chip 
-          label="Configurations"
-          color="primary"
-          variant="outlined"
-          size="small"
-        />
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" gutterBottom>
+        Paramètres
       </Typography>
 
-      <Paper sx={{ p: 3, mb: 3, position: 'relative' }}>
-        <Box sx={{ 
-          position: 'absolute', 
-          right: 20, 
-          top: 20, 
-          display: 'flex', 
-          alignItems: 'center',
-          gap: 2
-        }}>
-          <input
-            accept="image/*"
-            style={{ display: 'none' }}
-            id="logo-upload"
-            type="file"
-            onChange={handleLogoUpload}
+      <Tabs 
+        value={activeTab} 
+        onChange={handleTabChange}
+        sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+      >
+        <Tab label="Entreprise" />
+        <Tab label="Catégories de dépenses" />
+      </Tabs>
+
+      <Paper sx={{ p: 3, mt: 2 }}>
+        {activeTab === 0 ? (
+          <EntrepriseSettings 
+            userId={userData._id}
+            entrepriseId={userData.entrepriseId}
+            onError={(message) => setSnackbar({ open: true, message, severity: 'error' })}
+            onSuccess={(message) => setSnackbar({ open: true, message, severity: 'success' })}
           />
-          <label htmlFor="logo-upload">
-            <IconButton component="span">
-              <CloudUpload fontSize="large" color="action" />
-            </IconButton>
-          </label>
-          <Avatar 
-            src={logoPreview}
-            sx={{ 
-              width: 100, 
-              height: 100, 
-              border: '2px solid',
-              borderColor: 'primary.main'
-            }}
-          >
-            <Business sx={{ fontSize: 40 }} />
-          </Avatar>
-        </Box>
-
-        <form onSubmit={handleSubmit}>
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={8}>
-              <TextField
-                fullWidth
-                label="Nom de l'entreprise"
-                name="nom"
-                value={formData.nom}
-                onChange={handleChange}
-                error={!!formErrors.nom}
-                helperText={formErrors.nom}
-                InputProps={{
-                  startAdornment: <CorporateFare sx={{ color: 'action.active', mr: 1 }} />
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <FormControl fullWidth>
-                <InputLabel>Forme juridique</InputLabel>
-                <Select
-                  name="formeJuridique"
-                  value={formData.formeJuridique}
-                  onChange={handleChange}
-                  label="Forme juridique"
-                  error={!!formErrors.formeJuridique}
-                >
-                  {['SARL', 'SA', 'SAS', 'EI', 'EURL', 'Autre'].map(option => (
-                    <MenuItem key={option} value={option}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <VerifiedUser fontSize="small" />
-                        {option}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Numéro fiscal"
-                name="numeroFiscal"
-                value={formData.numeroFiscal}
-                onChange={handleChange}
-                error={!!formErrors.numeroFiscal}
-                helperText={formErrors.numeroFiscal}
-                InputProps={{
-                  startAdornment: <VerifiedUser sx={{ color: 'action.active', mr: 1 }} />
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Téléphone"
-                name="telephone"
-                value={formData.telephone}
-                onChange={handleChange}
-                error={!!formErrors.telephone}
-                helperText={formErrors.telephone}
-                InputProps={{
-                  startAdornment: <Phone sx={{ color: 'action.active', mr: 1 }} />
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Adresse"
-                name="adresse"
-                value={formData.adresse}
-                onChange={handleChange}
-                multiline
-                rows={2}
-                error={!!formErrors.adresse}
-                helperText={formErrors.adresse}
-                InputProps={{
-                  startAdornment: <LocationOn sx={{ color: 'action.active', mr: 1 }} />
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Email"
-                name="email"
-                type="email"
-                value={formData.email}
-                onChange={handleChange}
-                error={!!formErrors.email}
-                helperText={formErrors.email}
-                InputProps={{
-                  startAdornment: <Email sx={{ color: 'action.active', mr: 1 }} />
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              <Box sx={{ 
-                display: 'flex', 
-                justifyContent: 'flex-end', 
-                gap: 2,
-                '& button': { textTransform: 'none' }
-              }}>
-                <Button
-                  type="submit"
-                  variant="contained"
-                  startIcon={<Save />}
-                  sx={{ 
-                    minWidth: 120,
-                    bgcolor: 'primary.main',
-                    '&:hover': { bgcolor: 'primary.dark' }
-                  }}
-                >
-                  Sauvegarder
-                </Button>
-              </Box>
-            </Grid>
-          </Grid>
-        </form>
+        ) : (
+          <CategorySettings 
+            userId={userData._id}
+            entrepriseId={userData.entrepriseId}
+            onError={(message) => setSnackbar({ open: true, message, severity: 'error' })}
+            onSuccess={(message) => setSnackbar({ open: true, message, severity: 'success' })}
+          />
+        )}
       </Paper>
 
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
       >
         <Alert 
+          onClose={handleSnackbarClose}
           severity={snackbar.severity} 
-          sx={{ width: '100%', boxShadow: 3 }}
-          iconMapping={{
-            success: <CheckCircleOutline fontSize="inherit" />,
-            error: <ErrorOutline fontSize="inherit" />
-          }}
+          sx={{ width: '100%' }}
         >
           {snackbar.message}
         </Alert>

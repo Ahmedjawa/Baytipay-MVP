@@ -23,7 +23,7 @@ function DepensePage() {
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [beneficiaires, setBeneficiaires] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState([]); // Ensure this is initialized as an empty array
   const [depenseData, setDepenseData] = useState({
     categorie: '',
     montant: 0,
@@ -61,12 +61,25 @@ function DepensePage() {
       try {
         const [tiersRes, categoriesRes] = await Promise.all([
           apiClient.get('/api/tiers'),
-          apiClient.get('/api/categories?type=DEPENSE')
+          apiClient.get('/api/categories/type/DEPENSE') // Chemin d'API corrigé pour correspondre à CategorySettings.js
         ]);
-        setBeneficiaires(tiersRes.data);
-        setCategories(categoriesRes.data);
+        
+        // Traiter correctement la structure de réponse (comme dans CategorySettings.js)
+        // response.data.data pour les catégories
+        const beneficiairesData = Array.isArray(tiersRes.data) ? tiersRes.data : [];
+        const categoriesData = Array.isArray(categoriesRes.data.data) ? categoriesRes.data.data : [];
+        
+        setBeneficiaires(beneficiairesData);
+        setCategories(categoriesData);
+        
+        console.log('Beneficiaires loaded:', beneficiairesData.length);
+        console.log('Categories loaded:', categoriesData.length);
+        console.log('Categories data:', categoriesData); // Log détaillé pour débugger
       } catch (error) {
         console.error('Erreur lors du chargement des données initiales:', error);
+        // Initialize with empty arrays in case of error
+        setBeneficiaires([]);
+        setCategories([]);
         setSnackbar({
           open: true,
           message: 'Erreur lors du chargement des données',
@@ -301,8 +314,8 @@ function DepensePage() {
         return <InformationsStep 
                 depenseData={depenseData} 
                 updateDepenseData={handleDataChange} 
-                categories={categories}
-                beneficiaires={beneficiaires}
+                categories={categories || []} // Ensure we always pass an array
+                beneficiaires={beneficiaires || []} // Ensure we always pass an array
                />;
       case 1:
         return <PaiementStep depenseData={depenseData} updateDepenseData={handleDataChange} />;
@@ -315,8 +328,8 @@ function DepensePage() {
           depenseData={depenseData} 
           updateDepenseData={handleDataChange} 
           onImprimer={handleImprimer}
-          categories={categories}
-          onEdit={handleEdit}  // Ajout de la prop onEdit
+          categories={categories || []} // Ensure we always pass an array
+          onEdit={handleEdit}
         />;
       default:
         return 'Étape inconnue';

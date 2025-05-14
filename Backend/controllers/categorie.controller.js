@@ -8,11 +8,14 @@ const mongoose = require('mongoose');
  */
 exports.createCategorie = async (req, res) => {
   try {
-    // Ajout de l'ID de l'utilisateur actif comme créateur
-    req.body.creePar = req.user._id;
-    
-    const categorie = new Categorie(req.body);
-    const savedCategorie = await categorie.save();
+    const data = {
+      ...req.body,
+      creePar: req.user._id,
+      entrepriseId: req.user.entrepriseId // Récupération depuis le token
+    };
+
+    const categorie = new Categorie(data);
+    const savedCategorie = await categorie.save(); // Ajout de cette ligne pour définir savedCategorie
     
     res.status(201).json({
       success: true,
@@ -33,11 +36,14 @@ exports.createCategorie = async (req, res) => {
  */
 exports.getAllCategories = async (req, res) => {
   try {
-    const filters = { actif: true };
+    // Récupérer l'entrepriseId depuis le token JWT
+    const entrepriseId = req.user.entrepriseId;
     
-    // Filtrage par entreprise si spécifié
-    if (req.query.entrepriseId) {
-      filters.entrepriseId = mongoose.Types.ObjectId(req.query.entrepriseId);
+   const filters = { actif: true };
+    
+    // Utilisation correcte avec 'new' si nécessaire
+    if (req.user?.entrepriseId) {
+      filters.entrepriseId = req.user.entrepriseId; // Supprimer la conversion si déjà ObjectId
     }
 
     const categories = await Categorie.find(filters)
@@ -46,14 +52,14 @@ exports.getAllCategories = async (req, res) => {
       
     res.status(200).json({
       success: true,
-      count: categories.length,
-      data: categories
+      data: categories // Envoyer directement le tableau de données
     });
+    
   } catch (error) {
+    console.error('Erreur getCategories:', error);
     res.status(500).json({
       success: false,
-      message: "Erreur lors de la récupération des catégories",
-      error: error.message
+      message: "Erreur serveur - " + error.message
     });
   }
 };

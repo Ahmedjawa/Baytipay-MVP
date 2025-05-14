@@ -85,7 +85,7 @@ function App() {
 
   useEffect(() => {
     // Appel API vers le backend
-   apiClient.get('/api/data')
+    apiClient.get('/api/settings')
       .then((response) => {
         setData(response.data);
       })

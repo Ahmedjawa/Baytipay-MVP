@@ -5,6 +5,8 @@ const cors = require('cors');
 const { errors } = require('celebrate');
 const authRoutes = require('./routes/auth.routes');
 const authMiddleware = require('./middlewares/auth');
+const settingsController = require('./controllers/settings.controller');
+const upload = require('./middlewares/upload');
 
 // Vérification des variables d'environnement
 if (!process.env.JWT_SECRET || !process.env.MONGODB_URI) {
@@ -46,8 +48,6 @@ app.use((req, res, next) => {
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB connecté avec succès'))
   .catch(err => console.error('❌ Erreur MongoDB :', err));
-  
-  
 
 // Import des modèles
 require('./models/user.model');
@@ -85,12 +85,10 @@ const achatRoutes = require('./routes/achat.routes');
 const caisseRoutes = require('./routes/caisse.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const dataRoutes = require('./routes/data.routes');
-const tiersRoutes = require('./routes/tiers.routes');
-const categorieRoutes = require('./routes/categorie.routes');
 const compteBancaireRoutes = require('./routes/compteBancaire.routes');
 const recurrenceRoutes = require('./routes/recurrence.routes');
 const notificationRoutes = require('./routes/notification.routes');
-
+const categorieRoutes = require('./routes/categories.routes'); // Correction du nom
 
 // Application des routes
 app.use('/api/auth', authRoutes);
@@ -109,20 +107,47 @@ app.use('/api/ventes', venteRoutes);
 app.use('/api/achats', achatRoutes);
 app.use('/api/caisse', caisseRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/comptes', compteBancaireRoutes);
+app.use('/api/recurrences', recurrenceRoutes);
+app.use('/api/notifications', notificationRoutes); // Ajout du point-virgule
+app.use('/api/categories', categorieRoutes); // Utilisation de la variable importée
 app.use('/api', dataRoutes);
-app.use('/tiers', tiersRoutes);
-app.use('/categories', categorieRoutes);
-app.use('/comptes', compteBancaireRoutes);
-app.use('/recurrences', recurrenceRoutes);
-app.use('/notifications', notificationRoutes)
 
+// Routes API spécifiques
+app.get('/api/settings', authMiddleware, settingsController.getSettings);
+app.post('/api/settings', authMiddleware, settingsController.updateSettings);
+app.post('/api/settings/:id/logo', authMiddleware, upload.single('logo'), settingsController.uploadLogo);
 
 // Middleware de validation des erreurs
 app.use(errors());
 
 // Middleware de gestion d'erreurs global
 app.use((err, req, res, next) => {
-  console.error('[ERROR]', err.stack);
+  console.error('[ERROR] Erreur dans la requête :', {
+    method: req.method,
+    url: req.url,
+    headers: req.headers,
+    body: req.body,
+    error: err.message,
+    stack: err.stack
+  });
+  
+  if (err.name === 'JsonWebTokenError') {
+    console.error('[ERROR] Token JWT invalide');
+    return res.status(401).json({
+      success: false,
+      message: 'Token JWT invalide'
+    });
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    console.error('[ERROR] Token JWT expiré');
+    return res.status(401).json({
+      success: false,
+      message: 'Token JWT expiré'
+    });
+  }
+
   res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || 'Erreur interne du serveur',
@@ -131,20 +156,20 @@ app.use((err, req, res, next) => {
 });
 
 // Routes protégées
-app.get('/api/profile', authMiddleware, (req, res) => {
+app.get('/api/auth/verify', authMiddleware, (req, res) => {
   res.json({
     success: true,
+    isValid: true,
     user: {
-      id: req.user._id,
-      email: req.user.email,
+      _id: req.user._id,
+      entrepriseId: req.user.entrepriseId,
+      role: req.user.role,
       nom: req.user.nom,
-      prenom: req.user.prenom
+      prenom: req.user.prenom,
+      email: req.user.email,
+      avatar: req.user.avatar
     }
   });
-});
-
-app.get('/api/verify-token', authMiddleware, (req, res) => {
-  res.json({ valid: true });
 });
 
 // Démarrage du serveur

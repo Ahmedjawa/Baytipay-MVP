@@ -28,8 +28,8 @@ const CategorieSchema = new mongoose.Schema({
     default: 'category' // Icône Material-UI par défaut
   },
   parent: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Categorie',
+    type: String,
+    enum: ['SALAIRE', 'LOYER','AUTRE CHARGE'],
     default: null
   },
   entrepriseId: {

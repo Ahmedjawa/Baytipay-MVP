@@ -7,7 +7,7 @@ import {
 import {
   Category, Euro, CalendarToday, Business, Description,
   Repeat, Payment, AccountBalance, Notes, Receipt,
-  Print, Edit
+  Print, Edit, Notifications,Alarm // Icône ajoutée ici
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
