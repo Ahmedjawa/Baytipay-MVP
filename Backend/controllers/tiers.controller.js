@@ -15,6 +15,11 @@ exports.createTiers = async (req, res) => {
     delete tiersData._id;
     delete tiersData.createdAt;
     delete tiersData.updatedAt;
+	
+	if (tiersData.nom === 'Client comptoir') {
+  tiersData.matriculeFiscal = '0000000XXX'; // Forcer une valeur valide
+}
+
     
     // Vérification préalable pour les champs uniques
     const existingTiers = await Tiers.findOne({

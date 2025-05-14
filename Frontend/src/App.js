@@ -25,7 +25,7 @@ import TiersPage from './pages/Tiers'; // Nouvelle page unifiée pour les tiers
 import DossiersPage from './pages/Dossiers';
 import DossierDetailsPage from './pages/DossierDetails';
 import TransactionsPage from './pages/Transactions';
-import CaissePage from './pages/Caisse';
+import CaissePage from './pages/CaissePage';
 import ChatbotPage from './pages/Chatbot';
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';

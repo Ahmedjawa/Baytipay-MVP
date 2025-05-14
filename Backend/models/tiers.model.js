@@ -31,11 +31,13 @@ nom: {
   siteWeb: {
     type: String
   },
-  matriculeFiscal: {
-    type: String,
-    required: function() { return this.type !== 'FOURNISSEUR'; },
-    match: [/^[0-9]{7}[A-Za-z]{3}$/, 'Format matricule fiscale invalide']
+ matriculeFiscal: {
+  type: String,
+  required: function() { 
+    return this.type === 'CLIENT' && this.nom !== 'Client comptoir'; 
   },
+  match: [/^[0-9]{7}[A-Za-z]{3}$/, 'Format matricule fiscale invalide']
+},
   actif: {
     type: Boolean,
     default: true

@@ -1944,7 +1944,7 @@ exports.creerSerieDepenses = async (req, res) => {
     session.endSession();
   }
 };
-/ Mettre à jour une occurrence spécifique
+// Mettre à jour une occurrence spécifique
 exports.updateOccurrence = async (req, res) => {
   try {
     const { dateDepense, montant, description } = req.body;
@@ -2188,5 +2188,4 @@ analyserFichier = async (filePath) => {
   return stats;
 };
 
-};
 

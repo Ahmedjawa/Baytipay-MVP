@@ -89,7 +89,7 @@ const compteBancaireRoutes = require('./routes/compteBancaire.routes');
 const recurrenceRoutes = require('./routes/recurrence.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const categorieRoutes = require('./routes/categories.routes'); // Correction du nom
-
+const depenseroutes = require('./routes/depense.routes');
 // Application des routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -103,6 +103,7 @@ app.use('/api/factures', factureRoutes);
 app.use('/api/paiements', paiementRoutes);
 app.use('/api/remises', remiseRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/depenses', depenseroutes);
 app.use('/api/ventes', venteRoutes);
 app.use('/api/achats', achatRoutes);
 app.use('/api/caisse', caisseRoutes);
