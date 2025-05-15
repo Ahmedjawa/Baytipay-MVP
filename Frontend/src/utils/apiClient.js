@@ -4,13 +4,20 @@ import { logout } from '../auth';
 
 // Configuration de base
 const apiClient = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000',
-  timeout: 15000, // 15 secondes de timeout
+  baseURL: 'http://localhost:5000', // URL de base du backend
+  timeout: 30000, // 30 secondes de timeout
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest'
   }
 });
+
+// Routes OCR
+apiClient.ocr = {
+  process: '/api/ocr/process',
+  detectType: '/api/ocr/detect-type',
+  extractEntities: '/api/ocr/extract-entities'
+};
 
 // Intercepteur de requête
 apiClient.interceptors.request.use(

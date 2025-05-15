@@ -7,6 +7,15 @@ const authRoutes = require('./routes/auth.routes');
 const authMiddleware = require('./middlewares/auth');
 const settingsController = require('./controllers/settings.controller');
 const upload = require('./middlewares/upload');
+const path = require('path');
+const cookieParser = require('cookie-parser');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+const compression = require('compression');
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const hpp = require('hpp');
 
 // Vérification des variables d'environnement
 if (!process.env.JWT_SECRET || !process.env.MONGODB_URI) {
@@ -16,6 +25,21 @@ if (!process.env.JWT_SECRET || !process.env.MONGODB_URI) {
 
 // Initialisation de l'application
 const app = express();
+
+// Configuration des middlewares de sécurité et d'utilité
+app.use(helmet()); // Sécurité HTTP headers
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: true
+}));
+app.use(express.json({ limit: '50mb' })); // Augmenter la limite pour les fichiers OCR
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(cookieParser());
+app.use(mongoSanitize()); // Prévention des injections NoSQL
+app.use(xss()); // Prévention des attaques XSS
+app.use(hpp()); // Protection contre la pollution des paramètres HTTP
+app.use(compression()); // Compression des réponses
+app.use(morgan('dev')); // Logging des requêtes
 
 // Configuration CORS avancée
 const corsOptions = {
@@ -67,12 +91,13 @@ require('./models/vente.model');
 require('./models/achat.model');
 require('./models/caisse.model');
 require('./models/notification.model');
+require('./models/document.model');
 
 // Routes
 const userRoutes = require('./routes/user.routes');
 const articleRoutes = require('./routes/article.routes');
 const tierRoutes = require('./routes/tiers.routes');
-const documentRoutes = require('./routes/document.routes');
+//const documentRoutes = require('./routes/document.routes');
 const echeanceRoutes = require('./routes/echeance.routes');
 const echeancierRoutes = require('./routes/echeancier.routes');
 const entrepriseRoutes = require('./routes/entreprise.route');
@@ -90,6 +115,10 @@ const recurrenceRoutes = require('./routes/recurrence.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const categorieRoutes = require('./routes/categories.routes'); // Correction du nom
 const depenseroutes = require('./routes/depense.routes');
+const documentRoutes = require('./routes/document.routes');
+const fileRoutes = require('./routes/file.routes');
+const ocrRoutes = require('./routes/ocr.routes'); // Ajouter les routes OCR
+
 // Application des routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -112,7 +141,33 @@ app.use('/api/comptes', compteBancaireRoutes);
 app.use('/api/recurrences', recurrenceRoutes);
 app.use('/api/notifications', notificationRoutes); // Ajout du point-virgule
 app.use('/api/categories', categorieRoutes); // Utilisation de la variable importée
+app.use('/api/ocr', ocrRoutes); // Ajouter les routes OCR
 app.use('/api', dataRoutes);
+
+// Dossier pour les fichiers statiques
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Routes API
+app.use('/api/documents', documentRoutes);
+app.use('/api/files', fileRoutes);
+// Ajoutez d'autres routes API ici
+
+// Route d'accueil de l'API pour vérifier si elle est en ligne
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API de gestion de documents opérationnelle',
+    version: '1.0.0'
+  });
+});
+
+// Rate limiting pour prévenir les attaques par force brute
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requêtes par IP
+  message: 'Trop de requêtes depuis cette IP, veuillez réessayer plus tard'
+});
+app.use('/api/', limiter);
 
 // Routes API spécifiques
 app.get('/api/settings', authMiddleware, settingsController.getSettings);

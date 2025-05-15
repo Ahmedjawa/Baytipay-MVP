@@ -202,18 +202,47 @@ exports.deleteTiers = async (req, res) => {
 exports.searchTiers = async (req, res) => {
   try {
     const searchTerm = req.query.q;
+    if (!searchTerm) {
+      return res.status(400).json({ message: "Le terme de recherche est requis" });
+    }
+
+    // Use simpler text search with case-insensitive option
     const results = await Tiers.find({
       $or: [
-        { nom: new RegExp(searchTerm, 'i') },
-        { email: new RegExp(searchTerm, 'i') },
-        { matriculeFiscal: new RegExp(searchTerm, 'i') }
+        { nom: { $regex: searchTerm, $options: 'i' } },
+        { email: { $regex: searchTerm, $options: 'i' } },
+        { matriculeFiscal: { $regex: searchTerm, $options: 'i' } }
       ]
     }).limit(5);
 
     res.status(200).json(results);
   } catch (error) {
-    console.error('❌ Erreur recherche tiers:', error);
-    res.status(500).json({ message: "Erreur lors de la recherche" });
+    console.error('❌ Erreur recherche tiers:', {
+      errorType: error.name,
+      errorMessage: error.message,
+      stack: error.stack
+    });
+    
+    // Check if it's a specific MongoDB error
+    if (error.name === 'MongoError') {
+      console.error('❌ MongoDB Error Details:', {
+        code: error.code,
+        operationTime: error.operationTime,
+        ok: error.ok,
+        n: error.n
+      });
+    }
+
+    // Return more detailed error response
+    res.status(500).json({ 
+      message: "Erreur lors de la recherche",
+      errorType: error.name,
+      details: {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      }
+    });
   }
 };
 

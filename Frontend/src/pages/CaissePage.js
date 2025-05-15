@@ -130,7 +130,7 @@ function CaissePage() {
   const handleClientComptoir = async () => {
   try {
     // Rechercher le client "Client comptoir"
-    const response = await apiClient.get('api/Tiers', {
+    const response = await apiClient.get('/api/tiers/search', {
       params: { q: 'Client comptoir' }
     });
     
@@ -147,7 +147,7 @@ function CaissePage() {
         email: 'comptoir@example.com'
       };
       
-      const createResponse = await apiClient.post('api/Tiers', nouveauClient);
+      const createResponse = await apiClient.post('/api/Tiers', nouveauClient);
       client = createResponse.data;
     }
 	    // Mettre à jour la vente avec ce client
@@ -174,10 +174,43 @@ function CaissePage() {
     const fetchInitialData = async () => {
       try {
         setLoading(true);
+		
+		 // Rechercher/créer le client comptoir
+     const searchResponse = await apiClient.get('/api/tiers/search', {
+        params: { q: 'Client comptoir' }
+      });
+
+      setHistoryFilter({
+        dateDebut: startOfDay(new Date()),
+        dateFin: endOfDay(new Date()),
+        modePaiement: 'tous',
+        minAmount: '',
+        maxAmount: '',
+        clientName: ''
+      });
+
+      let clientComptoir = searchResponse.data[0];
+      if (!clientComptoir) {
+        const nouveauClient = {
+          nom: 'Client comptoir',
+          type: 'CLIENT',
+          matriculeFiscal: '0000000XXX',
+          adresse: 'Non spécifié',
+          telephone: '00000000',
+          email: 'comptoir@example.com'
+        };
+        const createResponse = await apiClient.post('/api/Tiers', nouveauClient);
+        clientComptoir = createResponse.data;
+      }
+	   // Initialiser la vente avec le client comptoir
+      setVenteEnCours(prev => ({
+        ...prev,
+        client: clientComptoir
+      }));
         
         // Charger les articles et les clients depuis votre API
-        const articlesResponse = await apiClient.get('api/articles');
-        const clientsResponse = await apiClient.get('api/Tiers');
+        const articlesResponse = await apiClient.get('/api/articles');
+        const clientsResponse = await apiClient.get('/api/Tiers');
         
         setArticles(articlesResponse.data);
         setClients(clientsResponse.data);
@@ -653,8 +686,8 @@ function CaissePage() {
       });
       
       // Réinitialiser le panier
-      setVenteEnCours({
-        client: null,
+      setVenteEnCours(prevState => ({
+        client: clients.find(c => c.nom === 'Client comptoir'),
         articles: [],
         sousTotal: 0,
         remise: 0,
@@ -666,7 +699,7 @@ function CaissePage() {
           monnaie: 0,
           reference: ''
         }
-      });
+      }));
       
       // Fermer le dialogue de paiement
       setDialogues({ ...dialogues, paiement: false });
@@ -676,99 +709,6 @@ function CaissePage() {
       setSnackbar({
         open: true,
         message: error.response?.data?.message || error.message || "Erreur lors de la finalisation de la vente",
-        severity: 'error'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Ajouter un mouvement de caisse manuel
-  const handleAddMouvement = async () => {
-    try {
-      if (!caisseStatus.isOpen) {
-        setSnackbar({
-          open: true,
-          message: 'La caisse doit être ouverte pour ajouter un mouvement',
-          severity: 'error'
-        });
-        return;
-      }
-
-      // Valider le montant
-      if (!nouveauMouvement.montant || nouveauMouvement.montant <= 0) {
-        setSnackbar({
-          open: true,
-          message: 'Veuillez saisir un montant valide',
-          severity: 'error'
-        });
-        return;
-      }
-
-      // Valider la description
-      if (!nouveauMouvement.description.trim()) {
-        setSnackbar({
-          open: true,
-          message: 'Veuillez saisir une description',
-          severity: 'error'
-        });
-        return;
-      }
-
-      setLoading(true);
-
-      // Appeler l'API pour ajouter le mouvement
-      const response = await caisseService.ajouterMouvement({
-        type: nouveauMouvement.type,
-        montant: parseFloat(nouveauMouvement.montant),
-        modePaiement: nouveauMouvement.modePaiement,
-        description: nouveauMouvement.description,
-        reference: nouveauMouvement.reference || ''
-      });
-
-      // Mettre à jour le statut de la caisse
-      const caisseStatusResponse = await caisseService.getCaisseStatus();
-      setCaisseStatus({
-        ...caisseStatus,
-        soldeCourant: caisseStatusResponse.data.soldeCourant
-      });
-
-      // Rafraîchir le journal de caisse
-      loadJournalCaisse();
-
-      // Réinitialiser le formulaire
-      setNouveauMouvement({
-        type: 'ENCAISSEMENT',
-        montant: 0,
-        modePaiement: 'ESPECES',
-        description: '',
-        reference: ''
-      });
-	   // Ajouter à l'historique des transactions
-      const newTransaction = {
-        id: Date.now(),
-        type: 'VENTE',
-        client: venteEnCours.client?.nom || 'Client au comptoir',
-        montant: venteEnCours.totalTTC,
-        modePaiement: venteEnCours.modePaiement,
-        date: new Date().toISOString(),
-        articles: venteEnCours.articles.length
-      };
-
-      // Fermer le dialogue
-      setDialogues({ ...dialogues, mouvement: false });
-
-      // Afficher un message de succès
-      setSnackbar({
-        open: true,
-        message: 'Mouvement de caisse enregistré avec succès',
-        severity: 'success'
-      });
-    } catch (error) {
-      console.error("Erreur lors de l'ajout du mouvement:", error);
-      setSnackbar({
-        open: true,
-        message: error.response?.data?.message || error.message || "Erreur lors de l'ajout du mouvement",
         severity: 'error'
       });
     } finally {
@@ -804,7 +744,7 @@ function CaissePage() {
       setLoading(true);
       
       // Appel API pour générer un rapport
-      const response = await apiClient.get('api/caisse/rapport-journalier');
+      const response = await apiClient.get('/api/caisse/rapport-journalier');
       
       // Télécharger ou afficher le rapport
       console.log('Rapport généré:', response.data);

@@ -22,8 +22,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import TiersPage from './pages/Tiers'; // Nouvelle page unifiée pour les tiers
-import DossiersPage from './pages/Dossiers';
-import DossierDetailsPage from './pages/DossierDetails';
 import TransactionsPage from './pages/Transactions';
 import CaissePage from './pages/CaissePage';
 import ChatbotPage from './pages/Chatbot';
@@ -36,6 +34,7 @@ import ArticlesPage from './pages/Articles';
 import VentesList from './pages/VentesList';
 import AchatPage from './pages/AchatPage';
 import DepensePage from './pages/DepensePage';
+import ScanPage from './pages/ScanPage';
 
 // Thème personnalisé
 const theme = createTheme({
@@ -149,10 +148,9 @@ function AppRoutes({ setDirection }) {
 		  <Route path="/achat" element={<AchatPage />} />
 		  <Route path="/vente" element={<VentePage />} />
 		  <Route path="/ventes" element={<VentesList />} />
-          <Route path="/dossiers" element={<DossiersPage />} />
-          <Route path="/dossiers/:id" element={<DossierDetailsPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/caisse" element={<CaissePage />} />
+		  <Route path="/scan" element={<ScanPage />} /> 
           <Route path="/chatbot" element={<ChatbotPage />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />

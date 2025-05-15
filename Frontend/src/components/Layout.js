@@ -1,4 +1,4 @@
-// client/src/components/Layout.js - Structure générale de l'application
+// Mise à jour du fichier Layout.js pour ajouter l'option de scan au menu
 
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
@@ -21,7 +21,8 @@ import {
   ChevronLeft as ChevronLeftIcon,
   Logout as LogoutIcon,
   Business as BusinessIcon,
-  Inventory as InventoryIcon
+  Inventory as InventoryIcon,
+  DocumentScanner as ScannerIcon  // Nouvelle icône pour la fonctionnalité de scan
 } from '@mui/icons-material';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { useAuth } from '../context/AuthContext'; // Import du contexte d'authentification
@@ -87,36 +88,40 @@ export default function Layout({ setDirection }) {
   
   // Éléments du menu principal
   const menuItems = [
-    { text: 'Tableau de bord', icon: <DashboardIcon />, path: '/' },
+    { text: 'Tableau de bord', icon: <DashboardIcon />, path: '/dashboard' },
     { 
       text: 'Tiers', 
       icon: <BusinessIcon />, 
-     path: '/tiers'
+      path: '/tiers'
     },
     { 
       text: 'Articles', 
       icon: <InventoryIcon />, 
       path: '/articles'
     },
-	{ 
-    text: 'Achat', 
-    icon: <LocalShippingIcon />, 
-    path: '/achat'
-  },
-	
+    { 
+      text: 'Achat', 
+      icon: <LocalShippingIcon />, 
+      path: '/achat'
+    },
     { 
       text: 'Vente', 
       icon: <ShoppingCartIcon />, 
       path: '/vente'
     },
-	 { 
+    { 
       text: 'Depense', 
       icon: <ShoppingCartIcon />, 
       path: '/depense'
     },
-    { text: 'Dossiers', icon: <FolderIcon />, path: '/dossiers' },
+   
     { text: 'Transactions', icon: <PaymentIcon />, path: '/transactions' },
     { text: 'Caisse', icon: <AccountBalanceIcon />, path: '/caisse' },
+	 { 
+      text: 'Scanner un document', 
+      icon: <ScannerIcon />, 
+      path: '/scan'
+    },
     { text: 'Assistant IA', icon: <ChatIcon />, path: '/chatbot' },
     { text: 'Paramètres', icon: <SettingsIcon />, path: '/settings' },
   ];
