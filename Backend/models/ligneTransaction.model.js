@@ -7,10 +7,12 @@ const ligneTransactionSchema = new mongoose.Schema({
     ref: 'Transaction',
     required: [true, 'L\'ID de transaction est obligatoire']
   },
-  produitId: {
+  articleId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Produit',
-    required: function() { return this.type !== 'SERVICE'; }
+    ref: 'Article',
+    required: function() { 
+      return this.type === 'PRODUIT';
+    }
   },
   designation: {
     type: String,
@@ -101,13 +103,18 @@ ligneTransactionSchema.pre('save', function(next) {
   if (!this.montantTTC) {
     this.montantTTC = this.montantHT + this.montantTVA;
   }
+
+  // Si c'est un service et qu'il n'y a pas d'articleId, on s'assure que le type est bien SERVICE
+  if (!this.articleId) {
+    this.type = 'SERVICE';
+  }
   
   next();
 });
 
 // Index for better performance
 ligneTransactionSchema.index({ transactionId: 1 });
-ligneTransactionSchema.index({ produitId: 1 });
+ligneTransactionSchema.index({ articleId: 1 });
 ligneTransactionSchema.index({ entrepriseId: 1 });
 
 const LigneTransaction = mongoose.model('LigneTransaction', ligneTransactionSchema, 'ligneTransactions');

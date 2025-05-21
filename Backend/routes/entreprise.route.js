@@ -10,6 +10,7 @@ router.get('/', entrepriseController.getAllEntreprises);
 router.use(authMiddleware);
 router.post('/', entrepriseController.createOrUpdateEntreprise);
 router.put('/:id', entrepriseController.createOrUpdateEntreprise);
+router.get('/profile', entrepriseController.getEntrepriseProfile);
 router.get('/:id', entrepriseController.getEntrepriseById);
 
 module.exports = router;

@@ -39,6 +39,7 @@ import {
 } from '@mui/icons-material';
 import apiClient from '../utils/apiClient';
 import ocrService from '../utils/ocrService';
+import ocrDataMapper from '../utils/ocrDataMapper';
 
 const steps = ['Capture du document', 'Traitement et analyse', 'Validation et actions'];
 
@@ -136,34 +137,80 @@ export default function ScanPage() {
   
   // Traitement OCR de l'image
   const processImageWithOCR = async (imageData) => {
-    try {
-      setIsLoading(true);
-      setProcessingProgress(0);
-      
-      // Prétraitement et OCR
-      const { text, entities } = await ocrService.processImage(imageData, {
-        brightness: brightness - 100,
-        contrast: contrast - 100
+  try {
+    setIsLoading(true);
+    setProcessingProgress(0);
+    
+    // Prétraitement et OCR
+    const ocrResponse = await ocrService.processImage(imageData, {
+      brightness: brightness - 100,
+      contrast: contrast - 100
+    });
+    
+    console.log("Réponse OCR brute:", ocrResponse);
+    
+    // Vérification du format des entités
+    if (ocrResponse.entities) {
+      console.log("Toutes les entités:", JSON.stringify(ocrResponse.entities, null, 2));
+      // Forcer le format attendu par le mapper
+      Object.keys(ocrResponse.entities).forEach(key => {
+        const value = ocrResponse.entities[key];
+        // Si l'entité n'est pas un tableau, la convertir
+        if (!Array.isArray(value)) {
+          console.log(`L'entité ${key} n'est pas un tableau, conversion...`);
+          if (typeof value === 'object' && value !== null) {
+            // Si c'est un objet, le convertir en tableau d'objets
+            ocrResponse.entities[key] = [value];
+          } else {
+            // Si c'est une valeur simple, créer un objet avec les propriétés attendues
+            ocrResponse.entities[key] = [{
+              value: String(value),
+              confidence: 0.85
+            }];
+          }
+        } else if (value.length > 0 && !value[0].hasOwnProperty('value')) {
+          // Si c'est un tableau mais sans la propriété 'value'
+          ocrResponse.entities[key] = value.map(item => ({
+            value: typeof item === 'object' ? JSON.stringify(item) : String(item),
+            confidence: 0.85
+          }));
+        }
+        console.log(`Entité ${key} après conversion:`, ocrResponse.entities[key]);
       });
-      
-      // Détecter le type de document
-      const documentType = await ocrService.detectDocumentType(text);
-      
-      // Mettre à jour l'état avec les données extraites
-      setExtractedData({
-        ...extractedData,
-        ...entities,
-        documentType: documentType.type
-      });
-      
-      setActiveStep(2);
-    } catch (error) {
-      console.error('Erreur lors du traitement OCR:', error);
-      alert('Erreur lors du traitement de l\'image. Veuillez réessayer.');
-    } finally {
-      setIsLoading(false);
+    } else {
+      console.warn("Aucune entité trouvée dans la réponse OCR");
+      ocrResponse.entities = {};
     }
-  };
+    
+    // Détecter le type de document si ce n'est pas déjà fait
+    let documentType = {};
+    if (ocrResponse.text) {
+      try {
+        documentType = await ocrService.detectDocumentType(ocrResponse.text);
+      } catch (error) {
+        console.warn("Erreur lors de la détection du type de document:", error);
+      }
+    }
+    
+    // Utiliser le mapper pour convertir les données OCR au format attendu par le formulaire
+    const mappedData = ocrDataMapper.mapOcrResponseToFormData(ocrResponse);
+    
+    console.log("Données mappées finales:", mappedData);
+    
+    // Mettre à jour l'état avec les données extraites
+    setExtractedData({
+      ...mappedData,
+      documentType: documentType.type || ''
+    });
+    
+    setActiveStep(2);
+  } catch (error) {
+    console.error('Erreur lors du traitement OCR:', error);
+    alert('Erreur lors du traitement de l\'image. Veuillez réessayer.');
+  } finally {
+    setIsLoading(false);
+  }
+};
   
   // Fonctions pour gérer la caméra
   const handleStartCamera = async () => {

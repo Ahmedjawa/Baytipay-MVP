@@ -29,17 +29,27 @@ const imageMiddleware = {
       // Créer une instance Sharp
       let image = sharp(imageBuffer);
 
-      // Configuration par défaut
-      const defaultOptions = {
-        width: 1500,
-        height: 2000,
-        grayscale: true,
-        normalize: true,
-        sharpen: true,
-        threshold: true,
-        thresholdValue: 128,
-        quality: 100
-      };
+     const defaultOptions = {
+  width: 2400, // Résolution plus élevée
+  height: 3200,
+  grayscale: true,
+  normalize: true,
+  sharpen: {
+    sigma: 1.5,
+    flat: 1.2,
+    jagged: 2.8
+  },
+  threshold: 160, // Valeur optimale pour les documents
+  quality: 90
+};
+
+// Modification du pipeline de traitement
+image = image
+  .rotate() // Correction automatique de l'orientation
+  .modulate({ brightness: 1.2 }) // Augmentation de la luminosité
+  .sharpen(defaultOptions.sharpen)
+  .threshold(defaultOptions.threshold)
+  .withMetadata(); // Conservation des métadonnées
 
       // Fusionner les options par défaut avec les options fournies
       const processingOptions = { ...defaultOptions, ...options };

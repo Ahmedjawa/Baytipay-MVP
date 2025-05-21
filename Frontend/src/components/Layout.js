@@ -1,6 +1,6 @@
 // Mise à jour du fichier Layout.js pour ajouter l'option de scan au menu
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { 
   AppBar, Box, Drawer, Toolbar, Typography, Divider, IconButton, 
@@ -25,7 +25,7 @@ import {
   DocumentScanner as ScannerIcon  // Nouvelle icône pour la fonctionnalité de scan
 } from '@mui/icons-material';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import { useAuth } from '../context/AuthContext'; // Import du contexte d'authentification
+import { useAuth } from '../contexts/AuthContext'; // Import du contexte d'authentification
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 
 // Largeur du drawer
@@ -34,7 +34,7 @@ const drawerWidth = 240;
 export default function Layout({ setDirection }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth(); // Récupération de la fonction de déconnexion
+  const { user, logout } = useAuth(); // Récupération de l'utilisateur et de la fonction de déconnexion
   
   // États pour la gestion du drawer et des menus
   const [open, setOpen] = useState(true);
@@ -102,12 +102,12 @@ export default function Layout({ setDirection }) {
     { 
       text: 'Achat', 
       icon: <LocalShippingIcon />, 
-      path: '/achat'
+      path: '/achats'
     },
     { 
       text: 'Vente', 
-      icon: <ShoppingCartIcon />, 
-      path: '/vente'
+      icon: <ShoppingCartIcon />,
+      path: '/ventes'  // Modification ici pour aller directement vers les ventes
     },
     { 
       text: 'Depense', 
@@ -131,6 +131,13 @@ export default function Layout({ setDirection }) {
     { text: 'Liste des tiers', path: '/tiers' },
     { text: 'Ajouter un tiers', path: '/tiers/nouveau' },
   ];
+  
+  // Rediriger vers la page de connexion si l'utilisateur n'est pas connecté
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+    }
+  }, [user, navigate]);
   
   return (
     <Box sx={{ display: 'flex' }}>

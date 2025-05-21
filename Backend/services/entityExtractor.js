@@ -17,28 +17,26 @@ class EntityExtractor {
    */
   async initialize() {
     // Définir les entités et modèles à reconnaître
-    this.manager.addNamedEntityText('tiers', 'fournisseur', ['fra'], [
-      'STEG', 'Tunisie Telecom', 'Orange', 'Ooredoo', 'SONEDE',
-      'Carrefour', 'Monoprix', 'Géant', 'MG', 'Total', 'Shell'
-    ]);
+    // Référence - Patterns plus complets
+this.manager.addRegexEntity('reference', 'fra', 
+  /(?:REF|Réf|Facture|FAC)[\s:-]*([A-Z0-9]{4,}[-\/][A-Z0-9]{4,})/i
+);
+this.manager.addRegexEntity('reference', 'fra', 
+  /\b(?:[A-Z]{2,5}-\d{3,8}-\d{2,4}|[A-Z]{3,}\d{4,})\b/
+);
 
-    this.manager.addRegexEntity('reference', 'fra', /([A-Z]{2,3}[-\s]?\d{8}[-\s]?\d{3})/i);
-    this.manager.addRegexEntity('reference', 'fra', /(facture|FACTURE|FAC)[-\s]?\d{8}[-\s]?\d{3}/i);
-    this.manager.addRegexEntity('reference', 'fra', /\b([A-Z0-9]{2,10}[-/]\d{2,8})\b/);
+// Dates - Meilleure gestion des formats
+this.manager.addRegexEntity('date', 'fra', 
+  /(?:date|échéance|le)\s*:\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i
+);
 
-    this.manager.addRegexEntity('montantTTC', 'fra', /total(?:\s+TTC)?[\s:]+(\d+[.,]\d{2})/i);
-    this.manager.addRegexEntity('montantTTC', 'fra', /montant(?:\s+à\s+payer)?[\s:]+(\d+[.,]\d{2})/i);
-    this.manager.addRegexEntity('montantTTC', 'fra', /(?:^|\s)(\d+[.,]\d{2})(?:\s+€|\s+EUR|\s+DT|\s+TND)/);
-
-    this.manager.addRegexEntity('montantHT', 'fra', /(?:montant|total)(?:\s+HT)[\s:]+(\d+[.,]\d{2})/i);
-    this.manager.addRegexEntity('montantHT', 'fra', /prix\s+HT[\s:]+(\d+[.,]\d{2})/i);
-
-    this.manager.addRegexEntity('tva', 'fra', /TVA[\s:]+(\d+[.,]\d{2})/i);
-    this.manager.addRegexEntity('tva', 'fra', /(?:TVA|T\.V\.A\.)\s+\d{1,2}(?:%|pour cent)[\s:]+(\d+[.,]\d{2})/i);
-
-    this.manager.addRegexEntity('date', 'fra', /date[\s:]+(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})/i);
-    this.manager.addRegexEntity('date', 'fra', /(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})/);
-    this.manager.addRegexEntity('date', 'fra', /(\d{2,4}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2})/);
+// Montants - Capture plus robuste
+this.manager.addRegexEntity('montantTTC', 'fra', 
+  /total\s+(?:ttc|à\s+payer)[\s:]+([\d\s]+[.,]\d{2})/i
+);
+this.manager.addRegexEntity('montantHT', 'fra', 
+  /montant\s+ht[\s:]+([\d\s]+[.,]\d{2})/i
+);
 
     // Entraîner le modèle
     await this.manager.train();
@@ -88,23 +86,20 @@ class EntityExtractor {
    * @param {string} dateStr - Date extraite brute
    * @returns {string} - Date normalisée ou null si invalide
    */
-  formatDate(dateStr) {
-    if (!dateStr) return null;
-    
-    // Essayer différents formats de date courants
-    const formats = ['DD/MM/YYYY', 'DD-MM-YYYY', 'DD.MM.YYYY', 
-                     'YYYY/MM/DD', 'YYYY-MM-DD', 'YYYY.MM.DD',
-                     'DD/MM/YY', 'DD-MM-YY', 'DD.MM.YY'];
-    
-    for (const format of formats) {
-      const date = moment(dateStr, format, true);
-      if (date.isValid()) {
-        return date.format('YYYY-MM-DD');
-      }
-    }
-    
-    return null;
-  }
+formatDate(dateStr) {
+  // Nettoyage préalable
+  const cleaned = dateStr
+    ?.replace(/[^0-9\/\-.]/g, '')
+    .replace(/(\d{2})(\d{2})(\d{4})/, '$1/$2/$3'); // Correction des dates collées
+  
+  const formats = [
+    'DD/MM/YYYY', 'DD-MM-YYYY', 'YYYY-MM-DD',
+    'DD.MM.YYYY', 'YYYY/MM/DD', 'DD/MM/YY'
+  ];
+
+  const date = moment(cleaned, formats, true);
+  return date.isValid() ? date.format('YYYY-MM-DD') : null;
+}
 
   /**
    * Normalise un montant extrait
@@ -112,16 +107,19 @@ class EntityExtractor {
    * @param {string} amountStr - Montant extrait brut
    * @returns {string} - Montant normalisé ou null si invalide
    */
-  formatAmount(amountStr) {
-    if (!amountStr) return null;
-    
-    // Remplacer la virgule par un point pour le format numérique
-    const normalized = amountStr.replace(',', '.');
-    
-    // Vérifier si c'est un nombre valide
-    const amount = parseFloat(normalized);
-    return isNaN(amount) ? null : amount.toFixed(2);
-  }
+ 
+formatAmount(amountStr) {
+  if (!amountStr) return null;
+  
+  // Gestion des séparateurs de milliers
+  const normalized = amountStr
+    .replace(/\s/g, '')
+    .replace(/,/g, '.')
+    .replace(/[^0-9.]/g, '');
+
+  const amount = parseFloat(normalized);
+  return isNaN(amount) ? null : amount.toFixed(2);
+}
 
   /**
    * Extrait toutes les entités pertinentes du texte
@@ -129,42 +127,64 @@ class EntityExtractor {
    * @param {string} text - Texte du document
    * @returns {object} - Entités extraites
    */
-  async extractEntities(text) {
-    try {
-      const cleanedText = this.cleanText(text);
-      
-      // Extraire les entités avec NLP.js
-      const result = await this.manager.process('fra', cleanedText);
-      const entities = {};
-      
-      // Traitement des entités trouvées
-      if (result.entities && result.entities.length > 0) {
-        result.entities.forEach(entity => {
-          // Pour les entités qui peuvent apparaître plusieurs fois, garder la première occurrence
-          if (!entities[entity.entity] || 
-              (entity.entity === 'montantTTC' || entity.entity === 'montantHT' || entity.entity === 'tva')) {
-            entities[entity.entity] = entity.sourceText;
-          }
-        });
+ async extractEntities(text) {
+  try {
+    const cleanedText = this.cleanText(text);
+    
+    // Ajouter un prétraitement supplémentaire
+    const enhancedText = cleanedText
+      .replace(/([a-z])([A-Z])/g, '$1 $2') // Séparation des mots collés
+      .replace(/[|¦]/g, 'I'); // Correction de caractères mal OCRisés
+
+    const result = await this.manager.process('fra', enhancedText);
+    
+    // Nouvelle logique de priorisation des entités
+    const entities = result.entities.reduce((acc, entity) => {
+      if (!acc[entity.entity] || entity.score > acc[entity.entity].score) {
+        acc[entity.entity] = {
+          value: entity.sourceText,
+          score: entity.score
+        };
       }
-      
-      // Extraction par expressions régulières pour les cas non détectés
-      this.extractWithRegex(cleanedText, entities);
-      
-      // Normaliser les valeurs extraites
-      return {
-        fournisseur: entities.fournisseur || null,
-        reference: entities.reference || null,
-        date: this.formatDate(entities.date),
-        montantHT: this.formatAmount(entities.montantHT),
-        tva: this.formatAmount(entities.tva),
-        montantTTC: this.formatAmount(entities.montantTTC)
-      };
-    } catch (error) {
-      console.error('Erreur lors de l\'extraction des entités:', error);
-      return {};
-    }
+      return acc;
+    }, {});
+
+    // Extraction secondaire améliorée
+    this.extractWithRegex(enhancedText, entities);
+
+    return {
+      fournisseur: entities.tiers?.value || this.findVendor(enhancedText),
+      reference: entities.reference?.value || this.findReference(enhancedText),
+      date: this.formatDate(entities.date?.value),
+      montantHT: this.formatAmount(entities.montantHT?.value),
+      tva: this.formatAmount(entities.tva?.value),
+      montantTTC: this.formatAmount(entities.montantTTC?.value)
+    };
+  } catch (error) {
+    console.error('Erreur lors de l\'extraction des entités:', error);
+    return {};
   }
+}
+
+// Nouvelle méthode de recherche des fournisseurs
+findVendor(text) {
+  const vendors = ['STEG', 'Tunisie Telecom', 'Orange', 'Ooredoo', 'SONEDE'];
+  return vendors.find(vendor => 
+    new RegExp(`\\b${vendor}\\b`, 'i').test(text)
+  ) || null;
+}
+findReference(text) {
+  const refPatterns = [
+    /(?:REF|Réf|Facture|FAC)[\s:-]*([A-Z0-9]{4,}[-\/][A-Z0-9]{4,})/i,
+    /\b(?:[A-Z]{2,5}-\d{3,8}-\d{2,4}|[A-Z]{3,}\d{4,})\b/
+  ];
+
+  for (const pattern of refPatterns) {
+    const match = text.match(pattern);
+    if (match) return match[1] || match[0];
+  }
+  return null;
+}
 
   /**
    * Extraction de secours par expressions régulières

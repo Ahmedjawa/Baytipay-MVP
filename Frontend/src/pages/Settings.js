@@ -7,7 +7,7 @@ import {
 import { Refresh } from '@mui/icons-material';
 import EntrepriseSettings from '../components/EntrepriseSettings';
 import CategorySettings from '../components/CategorySettings';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import apiClient from '../utils/apiClient';
 import { useNavigate } from 'react-router-dom';
 

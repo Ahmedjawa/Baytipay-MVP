@@ -36,6 +36,8 @@ import {
   BusinessCenter,
   AttachFile
 } from '@mui/icons-material';
+import DocumentMenu from '../DocumentMenu.jsx';
+
 
 function RecapitulatifStep({ achatData, updateAchatData, onImprimer }) {
   // Fonction pour formater les dates
@@ -367,6 +369,15 @@ function RecapitulatifStep({ achatData, updateAchatData, onImprimer }) {
                 {renderScannedDocuments()}
               </CardContent>
             </Card>
+          </Grid>
+        )}
+
+        {/* Menu de documents - uniquement affiché si l'achat a un ID */}
+        {achatData.id && (
+          <Grid item xs={12}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+              <DocumentMenu venteId={achatData.id} isVente={false} />
+            </Box>
           </Grid>
         )}
 

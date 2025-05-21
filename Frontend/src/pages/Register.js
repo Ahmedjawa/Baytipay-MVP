@@ -21,7 +21,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { register } from '../auth';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import apiClient from '../utils/apiClient';
 
 const Register = () => {

@@ -8,20 +8,15 @@ import rtlPlugin from 'stylis-plugin-rtl';
 import { CacheProvider } from '@emotion/react';
 import createCache from '@emotion/cache';
 import { prefixer } from 'stylis';
-import axios from "axios";
-import config from "./config";
-import apiClient from './utils/apiClient';
-import { useAuth } from './context/AuthContext';
-
+import { Box, CircularProgress } from '@mui/material';
 
 // Contexte d'authentification
-import { AuthProvider } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Composants principaux
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
-import TiersPage from './pages/Tiers'; // Nouvelle page unifiée pour les tiers
+import TiersPage from './pages/Tiers';
 import TransactionsPage from './pages/Transactions';
 import CaissePage from './pages/CaissePage';
 import ChatbotPage from './pages/Chatbot';
@@ -33,8 +28,10 @@ import VentePage from './pages/Vente';
 import ArticlesPage from './pages/Articles';
 import VentesList from './pages/VentesList';
 import AchatPage from './pages/AchatPage';
+import AchatsList from './pages/AchatsList';
 import DepensePage from './pages/DepensePage';
 import ScanPage from './pages/ScanPage';
+import VenteDetails from './pages/VenteDetails';
 
 // Thème personnalisé
 const theme = createTheme({
@@ -76,24 +73,59 @@ const cacheRtl = createCache({
   stylisPlugins: [prefixer, rtlPlugin],
 });
 
-function App() {
-  // État pour gérer la direction du texte (LTR/RTL)
-  const [direction, setDirection] = React.useState('ltr');
-  
-  const [data, setData] = useState([]);
+// Composant de routes
+const AppRoutes = ({ setDirection }) => {
+  const { user, loading } = useAuth();
 
-  useEffect(() => {
-    // Appel API vers le backend
-    apiClient.get('/api/settings')
-      .then((response) => {
-        setData(response.data);
-      })
-      .catch((error) => {
-        console.error("Erreur lors de la récupération des données :", error);
-      });
-  }, []);
+  if (loading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh' 
+      }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route 
+        path="/" 
+        element={!user ? <Navigate to="/login" /> : <Navigate to="/dashboard" />} 
+      />
+      {/* Route publique pour la connexion */}
+      <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
+      <Route path="/register" element={!user ? <Register /> : <Navigate to="/dashboard" />} />
+      
+      {/* Routes protégées nécessitant une authentification */}
+      <Route element={<Layout setDirection={setDirection} />}>
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/tiers" element={<TiersPage />} />
+        <Route path="/articles" element={<ArticlesPage />} />
+        <Route path="/depense" element={<DepensePage />} />
+        <Route path="/achat" element={<AchatPage />} />
+        <Route path="/achats" element={<AchatsList />} />
+        <Route path="/vente" element={<VentePage />} />
+        <Route path="/ventes" element={<VentesList />} />
+        <Route path="/ventes/:id" element={<VenteDetails />} />
+        <Route path="/transactions" element={<TransactionsPage />} />
+        <Route path="/caisse" element={<CaissePage />} />
+        <Route path="/scan" element={<ScanPage />} /> 
+        <Route path="/chatbot" element={<ChatbotPage />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
+  );
+};
+
+// Composant principal
+const App = () => {
+  const [direction, setDirection] = useState('ltr');
   
-  // Mise à jour du thème quand la direction change
   const themeWithDirection = React.useMemo(
     () => createTheme({
       ...theme,
@@ -103,61 +135,15 @@ function App() {
   );
   
   return (
-    <Router>
-      <AuthProvider>
-        {direction === 'rtl' ? (
-          <CacheProvider value={cacheRtl}>
-            <ThemeProvider theme={themeWithDirection}>
-              <CssBaseline />
-              <AppRoutes setDirection={setDirection} />
-            </ThemeProvider>
-          </CacheProvider>
-        ) : (
-          <ThemeProvider theme={themeWithDirection}>
-            <CssBaseline />
-            <AppRoutes setDirection={setDirection} />
-          </ThemeProvider>
-        )}
-      </AuthProvider>
-    </Router>
+    <AuthProvider>
+      <ThemeProvider theme={themeWithDirection}>
+        <CssBaseline />
+        <Router>
+          <AppRoutes setDirection={setDirection} />
+        </Router>
+      </ThemeProvider>
+    </AuthProvider>
   );
-}
-
-// Définition des routes
-function AppRoutes({ setDirection }) {
-  const { isAuthenticated } = useAuth(); // Ajouter cette ligne
-
-  return (
-    <Routes>
-      <Route 
-        path="/" 
-        element={!isAuthenticated ? <Navigate to="/login" /> : <Navigate to="/dashboard" />} 
-      />
-      {/* Route publique pour la connexion */}
-      <Route path="/login" element={<Login />} />
-	  <Route path="/register" element={<Register />} />
-	  
-      
-      {/* Routes protégées nécessitant une authentification */}
-      <Route element={<ProtectedRoute />}>
-        <Route element={<Layout setDirection={setDirection} />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/tiers" element={<TiersPage />} />
-		  <Route path="/articles" element={<ArticlesPage />} />
-		  <Route path="/depense" element={<DepensePage />} />
-		  <Route path="/achat" element={<AchatPage />} />
-		  <Route path="/vente" element={<VentePage />} />
-		  <Route path="/ventes" element={<VentesList />} />
-          <Route path="/transactions" element={<TransactionsPage />} />
-          <Route path="/caisse" element={<CaissePage />} />
-		  <Route path="/scan" element={<ScanPage />} /> 
-          <Route path="/chatbot" element={<ChatbotPage />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Route>
-    </Routes>
-  );
-}
+};
 
 export default App;

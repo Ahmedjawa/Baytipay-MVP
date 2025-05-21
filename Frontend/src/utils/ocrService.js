@@ -1,4 +1,5 @@
-// client/src/utils/ocrService.js
+// Amélioration du service OCR - client/src/utils/ocrService.js
+
 import apiClient from './apiClient';
 
 /**
@@ -25,11 +26,80 @@ class OCRService {
         options: options
       });
       
-      return response.data;
+      // Normaliser la structure de la réponse
+      return this.normalizeOCRResponse(response.data);
     } catch (error) {
       console.error("Erreur lors du traitement OCR:", error);
       throw error;
     }
+  }
+  
+  /**
+   * Normalise la structure de la réponse de l'API OCR
+   * pour garantir un format constant quelle que soit la source
+   * 
+   * @param {Object} responseData - Les données brutes retournées par l'API
+   * @returns {Object} - La réponse normalisée
+   */
+  normalizeOCRResponse(responseData) {
+    // Si la réponse est déjà dans le format attendu, la retourner telle quelle
+    if (responseData.entities) {
+      return responseData;
+    }
+    
+    // Si la réponse contient raw_results, l'utiliser comme source
+    if (responseData.raw_results) {
+      return {
+        text: responseData.text || '',
+        entities: this.convertToEntitiesFormat(responseData.raw_results),
+        model_version: responseData.model_version || 'unknown'
+      };
+    }
+    
+    // Cas où nous n'avons que la réponse success et le texte
+    if (responseData.success && responseData.text) {
+      return {
+        text: responseData.text,
+        entities: {},
+        model_version: responseData.model_version || 'unknown'
+      };
+    }
+    
+    // Dernière option - retourner tel quel
+    return responseData;
+  }
+  
+  /**
+   * Convertit un objet plat de résultats en format d'entités structuré
+   * 
+   * @param {Object} rawResults - Les résultats bruts extraits
+   * @returns {Object} - Format d'entités structuré
+   */
+  convertToEntitiesFormat(rawResults) {
+    const entities = {};
+    
+    // Vérifier si rawResults est un objet valide
+    if (!rawResults || typeof rawResults !== 'object') {
+      return entities;
+    }
+    
+    // Convertir chaque élément en tableau d'entités
+    Object.entries(rawResults).forEach(([key, value]) => {
+      // Si la valeur est déjà un tableau d'objets avec la structure attendue
+      if (Array.isArray(value) && value.length > 0 && value[0].value !== undefined) {
+        entities[key] = value;
+      } 
+      // Si la valeur est une chaîne ou un nombre
+      else if (typeof value === 'string' || typeof value === 'number') {
+        entities[key] = [{
+          value: value.toString(),
+          confidence: 0.85, // Confiance par défaut
+          source: 'ocr_service'
+        }];
+      }
+    });
+    
+    return entities;
   }
   
   /**
@@ -47,7 +117,8 @@ class OCRService {
       return response.data;
     } catch (error) {
       console.error("Erreur lors de la détection du type de document:", error);
-      throw error;
+      // Retourner un type par défaut en cas d'erreur
+      return { type: 'unknown', success: false };
     }
   }
   

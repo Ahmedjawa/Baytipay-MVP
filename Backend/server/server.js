@@ -11,6 +11,8 @@ dotenv.config();
 // Importer les routes
 const ocrRoutes = require('./routes/ocrRoutes');
 const documentRoutes = require('./routes/documentRoutes');
+const feedbackRoutes = require('./routes/feedback.routes');
+const modelRoutes = require('./routes/model.routes');
 
 // Initialiser l'application Express
 const app = express();
@@ -27,6 +29,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Routes
 app.use('/api/ocr', ocrRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/models', modelRoutes);
 
 // Route pour tester que le serveur fonctionne
 app.get('/', (req, res) => {

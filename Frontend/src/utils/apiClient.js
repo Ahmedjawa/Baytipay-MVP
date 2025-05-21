@@ -4,8 +4,8 @@ import { logout } from '../auth';
 
 // Configuration de base
 const apiClient = axios.create({
-  baseURL: 'http://localhost:5000', // URL de base du backend
-  timeout: 30000, // 30 secondes de timeout
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000',
+  timeout: 500000, // 30 secondes de timeout
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest'
@@ -53,7 +53,9 @@ apiClient.interceptors.response.use(
     // Gestion spécifique des erreurs 401
     if (error.response?.status === 401) {
       logout();
-      window.location.href = '/login?session_expired=1';
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
     }
 
     // Gestion des erreurs réseau

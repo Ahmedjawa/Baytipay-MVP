@@ -57,3 +57,23 @@ exports.createOrUpdateEntreprise = async (req, res) => {
     });
   }
 };
+
+// Nouvelle méthode pour récupérer le profil de l'entreprise de l'utilisateur connecté
+exports.getEntrepriseProfile = async (req, res) => {
+  try {
+    // Utiliser l'ID de l'entreprise associé à l'utilisateur connecté
+    const entreprise = await Entreprise.findById(req.user.entrepriseId);
+    
+    if (!entreprise) {
+      return res.status(404).json({ 
+        message: 'Profil d\'entreprise non trouvé'
+      });
+    }
+    
+    res.json(entreprise);
+  } catch (error) {
+    res.status(500).json({
+      message: error.message || 'Erreur lors de la récupération du profil'
+    });
+  }
+};

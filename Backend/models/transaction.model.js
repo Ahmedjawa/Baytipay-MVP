@@ -71,6 +71,13 @@ typeDocument: {
   timestamps: true
 });
 
+// Virtuals
+TransactionSchema.virtual('lignesTransaction', {
+  ref: 'LigneTransaction',
+  localField: '_id',
+  foreignField: 'transactionId'
+});
+
 // Fonction pour générer un numéro de transaction unique
 TransactionSchema.statics.generateNumeroTransaction = async function(type, entrepriseId) {
   const date = new Date();

@@ -6,123 +6,92 @@ import apiClient from '../utils/apiClient';
  * the necessary Transaction, Vente, and Paiement records
  * 
  * @param {Object} venteData - The sale data collected from the form
- * @param {Object} userData - User and enterprise IDs
+ * @param {Object} userData - User and enterprise IDs (optional)
  * @returns {Promise} The API response
  */
-export const createVente = async (venteData, userData) => {
+export const createVente = async (venteData, userData = null) => {
   try {
-    // 1. Generate unique transaction number
-    const date = new Date();
-    const annee = date.getFullYear().toString().substr(-2);
-    const mois = (date.getMonth() + 1).toString().padStart(2, '0');
-    const sequence = Math.floor(1000 + Math.random() * 9000);
-    const numeroTransaction = `V-${annee}${mois}-${sequence}`;
-    
-    // 2. Map frontend payment mode to backend enum
-    const modesPaiementBackend = {
-      especes: 'ESPECES',
-      cheque: 'CHEQUE_UNIQUE',
-      effet: 'EFFET_UNIQUE',
-      cheques_multiples: 'CHEQUES_MULTIPLES',
-      effets_multiples: 'EFFETS_MULTIPLES',
-      mixte: 'PAIEMENT_MIXTE'
-    };
-    
-    // 3. Calculate totals from articles
-    const montantTotalHT = venteData.articles.reduce(
-      (total, article) => total + (parseFloat(article.montantHT) || parseFloat(article.prixUnitaire) * parseFloat(article.quantite)), 0
-    );
-    const montantTaxes = venteData.articles.reduce(
-      (total, article) => {
-        const montantHT = parseFloat(article.montantHT) || parseFloat(article.prixUnitaire) * parseFloat(article.quantite);
-        return total + (montantHT * parseFloat(article.tva || 0) / 100);
-      }, 0
-    );
-    const montantTotalTTC = parseFloat(venteData.totalTTC) || (montantTotalHT + montantTaxes);
-    
-    // 4. Prepare sale data to send to vente endpoint directly
+    // Récupérer les données utilisateur si non fournies
+    if (!userData) {
+      const entrepriseId = localStorage.getItem('entrepriseId');
+      const userId = localStorage.getItem('userId');
+      if (!entrepriseId || !userId) {
+        throw new Error('Informations utilisateur non disponibles');
+      }
+      userData = { entrepriseId, userId };
+    }
+
+    // Vérifier que les données utilisateur sont valides
+    if (!userData.entrepriseId || !userData.userId) {
+      throw new Error('Informations utilisateur manquantes. Veuillez vous reconnecter.');
+    }
+
+    // Vérifier que les données de vente sont valides
+    if (!venteData) {
+      throw new Error('Données de vente manquantes');
+    }
+
+    if (!venteData.client || !venteData.client._id) {
+      throw new Error('Client non sélectionné');
+    }
+
+    if (!venteData.articles || !Array.isArray(venteData.articles) || venteData.articles.length === 0) {
+      throw new Error('Aucun article sélectionné');
+    }
+
+    console.log('Articles avant traitement:', venteData.articles);
+
+    // Préparer les données pour l'API
     const ventePayload = {
       clientId: venteData.client._id,
-      dateVente: new Date().toISOString(),
-      dateEcheance: venteData.paiementDetails?.dateEcheance || new Date().toISOString(),
-      modePaiement: modesPaiementBackend[venteData.modePaiement],
-      remiseGlobale: parseFloat(venteData.remise || 0),
-      montantTotalHT,
-      montantTotalTTC,
-      montantTaxes,
-      statut: 'VALIDEE',
+      typeDocument: venteData.typeDocument || 'FACTURE_PROFORMA',
+      modePaiement: (venteData.modePaiement || 'ESPECES').toUpperCase(),
       notesInternes: venteData.notes || '',
-      
-      // Include enterprise and user IDs in the payload
       entrepriseId: userData.entrepriseId,
       userId: userData.userId,
-      
-      // Add the required creePar field for validation
-      creePar: userData.userId,
-      
-      // Pass payment information
-      paiements: preparePaiements(venteData, montantTotalTTC, userData),
-      
-      // Pass ligne items
       lignes: venteData.articles.map(article => {
+        console.log('Traitement de l\'article:', article);
+        
         const prixUnitaireHT = parseFloat(article.prixUnitaire);
         const quantite = parseFloat(article.quantite);
-        const tauxTVA = parseFloat(article.tva || 0);
+        const tauxTVA = parseFloat(article.tva || 19);
         const remise = parseFloat(article.remise || 0);
         
-        // Calculate if not provided
-        const montantHT = parseFloat(article.montantHT) || (prixUnitaireHT * quantite * (1 - remise/100));
-        const montantTTC = parseFloat(article.montantTTC) || (montantHT * (1 + tauxTVA/100));
-        
-        return {
-          produitId: article.article,
+        // Calculer les montants
+        const montantHT = prixUnitaireHT * quantite * (1 - remise/100);
+        const montantTTC = montantHT * (1 + tauxTVA/100);
+
+        // S'assurer que l'ID de l'article est une chaîne de caractères
+        const articleId = String(article.article);
+
+        const ligne = {
+          articleId,
+          type: 'PRODUIT',
           designation: article.designation,
-          quantite: quantite,
-          prixUnitaireHT: prixUnitaireHT,
-          tauxTVA: tauxTVA,
-          remise: remise,
-          montantHT: montantHT,
-          montantTTC: montantTTC
+          quantite,
+          prixUnitaireHT,
+          tauxTVA,
+          remise,
+          montantHT,
+          montantTTC
         };
+
+        console.log('Ligne créée:', ligne);
+        return ligne;
       })
     };
-    
-    // Ajouter l'échéancier si applicable
-    if (['cheques_multiples', 'effets_multiples', 'mixte'].includes(venteData.modePaiement) && venteData.echeancier && venteData.echeancier.length > 0) {
-      // Calculer le montant total des échéances
-      const montantTotal = venteData.echeancier.reduce((total, echeance) => total + parseFloat(echeance.montant), 0);
-      
-      ventePayload.echeancier = {
-        montantTotal: montantTotal,
-        nombreEcheances: venteData.echeancier.length,
-        echeances: venteData.echeancier.map(echeance => {
-          // Déterminer le type en fonction du mode de paiement
-          let type = 'CHEQUE';
-          if (venteData.modePaiement === 'effets_multiples') {
-            type = 'EFFET';
-          } else if (venteData.modePaiement === 'mixte' && echeance.type) {
-            type = echeance.type.toUpperCase();
-          }
-          
-          return {
-            dateEcheance: echeance.dateEcheance,
-            montant: parseFloat(echeance.montant),
-            statut: 'A_RECEVOIR',
-            reference: echeance.reference || `ECH-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
-            banque: echeance.banque || '',
-            type: type,
-            notes: echeance.notes || ''
-          };
-        })
-      };
-    }
-    
-    // Create the sale using the enhanced vente endpoint
-    const venteResponse = await apiClient.post('api/ventes', ventePayload);
-    
-    return venteResponse.data;
+
+    console.log('Envoi des données de vente:', JSON.stringify(ventePayload, null, 2));
+
+    // Envoyer la requête à l'API
+    const response = await apiClient.post('/api/ventes', ventePayload);
+    return response.data;
+
   } catch (error) {
     console.error('Error creating sale:', error);
+    if (error.response) {
+      console.error('Détails de l\'erreur:', error.response.data);
+    }
     throw error;
   }
 };
@@ -145,8 +114,8 @@ function preparePaiements(venteData, montantTotalTTC, userData) {
       statut: 'ENCAISSE',
       dateStatut: new Date().toISOString(),
       entrepriseId: userData.entrepriseId,
-      userId: userData.userId,
-      creePar: userData.userId
+      userId: userData.id,
+      creePar: userData.id
     });
   } else if (['cheque', 'effet'].includes(venteData.modePaiement)) {
     const paiementType = venteData.modePaiement === 'cheque' ? 'CHEQUE' : 'EFFET';
@@ -159,8 +128,8 @@ function preparePaiements(venteData, montantTotalTTC, userData) {
       dateEcheance: venteData.paiementDetails?.dateEcheance || new Date().toISOString(),
       statut: 'EN_ATTENTE',
       entrepriseId: userData.entrepriseId,
-      userId: userData.userId,
-      creePar: userData.userId
+      userId: userData.id,
+      creePar: userData.id
     });
   } 
   // Pour les modes de paiement avec échéancier, on ne crée pas de paiements ici
@@ -168,3 +137,91 @@ function preparePaiements(venteData, montantTotalTTC, userData) {
   
   return paiements;
 }
+
+// Transformer un devis en bon de livraison
+export const transformerEnBonLivraison = async (venteId) => {
+  try {
+    console.log('Appel de l\'API de transformation avec ID:', venteId);
+    const response = await apiClient.post(`/api/ventes/${venteId}/transformer-en-bl`);
+    console.log('Réponse de l\'API de transformation:', response.data);
+    
+    if (!response.data || !response.data.success) {
+      throw new Error(response.data?.error || 'Erreur lors de la transformation');
+    }
+
+    // Retourner les données de la nouvelle vente
+    return {
+      success: true,
+      data: {
+        vente: response.data.data.vente,
+        transaction: response.data.data.transaction
+      }
+    };
+  } catch (error) {
+    console.error('Erreur lors de la transformation:', error);
+    throw new Error(error.response?.data?.error || 'Erreur lors de la transformation en bon de livraison');
+  }
+};
+
+// Transformer un bon de livraison en facture
+export const transformerEnFacture = async (venteId, modePaiement) => {
+  try {
+    const response = await apiClient.post(`/api/ventes/${venteId}/transformer-en-facture`, { modePaiement });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || 'Erreur lors de la transformation en facture');
+  }
+};
+
+// Mettre à jour une vente existante
+export const updateVente = async (id, venteData, userData = null) => {
+  try {
+    // Récupérer les données utilisateur si non fournies
+    if (!userData) {
+      const entrepriseId = localStorage.getItem('entrepriseId');
+      const userId = localStorage.getItem('userId');
+      if (!entrepriseId || !userId) {
+        throw new Error('Informations utilisateur non disponibles');
+      }
+      userData = { entrepriseId, userId };
+    }
+
+    // Vérifier que les données utilisateur sont valides
+    if (!userData.entrepriseId || !userData.userId) {
+      throw new Error('Informations utilisateur manquantes. Veuillez vous reconnecter.');
+    }
+
+    // Préparer les données pour l'API
+    const ventePayload = {
+      ...venteData,
+      entrepriseId: userData.entrepriseId,
+      creePar: userData.userId
+    };
+
+    // Envoyer la requête à l'API
+    const response = await apiClient.put(`/api/ventes/${id}`, ventePayload);
+    return response.data;
+
+  } catch (error) {
+    console.error('Error updating sale:', error);
+    throw error;
+  }
+};
+
+export const venteService = {
+  getAllVentes: () => apiClient.get('/api/ventes'),
+  getVenteById: (id) => apiClient.get(`/api/ventes/${id}`),
+  createVente: (data) => apiClient.post('/api/ventes', data),
+  updateVente: (id, data) => apiClient.put(`/api/ventes/${id}`, data),
+  deleteVente: (id) => apiClient.delete(`/api/ventes/${id}`),
+  validerVente: (id) => apiClient.post(`/api/ventes/${id}/valider`),
+  transformerEnBonLivraison: (id) => apiClient.post(`/api/ventes/${id}/transformer-en-bl`),
+  transformerEnFacture: (id, modePaiement) => 
+    apiClient.post(`/api/ventes/${id}/transformer-en-facture`, { modePaiement }),
+  transformerDevisEnBL: (devisIds) => 
+    apiClient.post('/api/ventes/transformer-devis-en-bl', { devisIds }),
+  transformerBLEnFactures: (blIds, modePaiement) => 
+    apiClient.post('/api/ventes/transformer-bl-en-factures', { blIds, modePaiement }),
+  genererDocumentComplementaire: (id, typeDocument, options = {}) => 
+    apiClient.post(`/api/ventes/${id}/generer-document-complementaire`, { typeDocument, options })
+};
