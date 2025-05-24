@@ -34,6 +34,9 @@ router.post('/transformer-devis-en-bl', venteController.transformerDevisEnBL);
 // POST to transform multiple bon de livraison into factures
 router.post('/transformer-bl-en-factures', venteController.transformerBLEnFactures);
 
+// POST to transform multiple documents into a new document (generic route)
+router.post('/transformer-documents', venteController.transformerDocuments);
+
 // POST to generate a complement document
 router.post('/:id/generer-document-complementaire', async (req, res) => {
   try {

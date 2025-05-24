@@ -46,16 +46,26 @@ apiClient.interceptors.request.use(
 // Intercepteur de réponse
 apiClient.interceptors.response.use(
   (response) => {
-    // Ne pas modifier la structure de la réponse
     return response;
   },
-  (error) => {
+  async (error) => {
     // Gestion spécifique des erreurs 401
     if (error.response?.status === 401) {
-      logout();
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      // Vérifier si c'est une erreur de token expiré
+      if (error.response.data?.message?.includes('token') || 
+          error.response.data?.message?.includes('session')) {
+        // Nettoyer le localStorage et rediriger vers la page de login
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('userId');
+        localStorage.removeItem('entrepriseId');
+        localStorage.removeItem('userRole');
+        delete apiClient.defaults.headers.common['Authorization'];
+        
+        // Rediriger vers la page de login avec un message
+        window.location.href = '/login?session_expired=true';
+        return Promise.reject(error);
+      }
     }
 
     // Gestion des erreurs réseau

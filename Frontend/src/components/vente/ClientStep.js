@@ -73,6 +73,12 @@ function ClientStep({ venteData, updateVenteData }) {
 
   // Sélectionner un client
   const handleSelectClient = (client) => {
+    console.log('Client sélectionné:', client);
+    if (client) {
+      console.log('ID client:', client._id);
+      const matchingClient = clients.find(c => c._id === client._id);
+      console.log('Client correspondant dans la liste:', matchingClient);
+    }
     updateVenteData({ client });
   };
 
@@ -170,12 +176,15 @@ function ClientStep({ venteData, updateVenteData }) {
               getOptionLabel={(option) => option.nom}
               value={venteData.client}
               onChange={(event, newValue) => handleSelectClient(newValue)}
+              disabled={venteData.clientLocked}
+              isOptionEqualToValue={(option, value) => option._id === value._id}
               renderInput={(params) => (
                 <TextField 
                   {...params} 
                   label="Rechercher un client" 
                   variant="outlined" 
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  disabled={venteData.clientLocked}
                   InputProps={{
                     ...params.InputProps,
                     startAdornment: (
@@ -217,6 +226,7 @@ function ClientStep({ venteData, updateVenteData }) {
               variant="contained" 
               startIcon={<Add />}
               onClick={() => setOpenAddDialog(true)}
+              disabled={venteData.clientLocked}
             >
               Nouveau client
             </Button>

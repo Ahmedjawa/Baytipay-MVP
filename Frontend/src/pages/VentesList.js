@@ -13,12 +13,11 @@ import {
   Visibility, Print, Delete, Add, CheckCircle, Edit, 
   ArrowForward, MoreVert, Search, FilterList, 
   ReceiptLong, Description, LocalShipping, AssignmentReturn,
-  AttachMoney, Person, Business, Transform
+  AttachMoney, Person, Business, Transform, Close
 } from '@mui/icons-material';
 import apiClient from '../utils/apiClient';
 import moment from 'moment';
 import { subDays, startOfYear, endOfYear } from 'date-fns';
-import TransformDevisDialog from '../components/vente/TransformDevisDialog';
 import { alpha } from '@mui/material/styles';
 import { DataGrid } from '@mui/x-data-grid';
 
@@ -60,7 +59,6 @@ function VentesList() {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [transformDialogOpen, setTransformDialogOpen] = useState(false);
 
   const periodes = [
     { label: '7 derniers jours', value: '7j' },
@@ -319,87 +317,44 @@ function VentesList() {
     setGroupActionMenuAnchor(null);
   };
 
-  // Fonction pour gérer la transformation groupée avec confirmation
+  // Modification de la fonction handleTransformGroup pour rediriger vers la page de création de BL ou facture
   const handleTransformGroup = async (targetType) => {
-    if (selectedVentes.length === 0) return;
-
-    if (targetType === 'BON_LIVRAISON') {
-      // Au lieu de transformer directement, ouvrir le dialogue
-      setTransformDialogOpen(true);
-    } else if (targetType === 'FACTURE_TTC') {
-      const confirmMessage = `Transformer ${selectedVentes.length} bons de livraison en factures ?`;
-
-      if (!window.confirm(confirmMessage)) return;
-
-      try {
-        const venteIds = selectedVentes.map(v => v._id);
-        const response = await apiClient.post('/api/ventes/transformer-bl-en-factures', { 
-          blIds: venteIds,
-          modePaiement: 'ESPECES'
-        });
-        
-        if (response.data.success) {
-          showNotification(`${selectedVentes.length} facture(s) créée(s) avec succès`);
-          setSelectedVentes([]);
-          setSelectedClientId(null);
-          setFilters(prev => ({ ...prev })); // Rafraîchir la liste
-        }
-      } catch (error) {
-        console.error('Erreur lors de la transformation groupée:', error);
-        showNotification(error.response?.data?.error || 'Erreur lors de la transformation', 'error');
-      }
+    if (selectedVentes.length === 0) {
+      showNotification('Veuillez sélectionner au moins un document', 'warning');
+      return;
     }
+    
+    // Vérifier que tous les documents sélectionnés sont du même type
+    const sourceTypes = Array.from(new Set(selectedVentes.map(v => v.typeDocument)));
+    if (sourceTypes.length > 1) {
+      showNotification('Veuillez sélectionner des documents du même type', 'warning');
+      return;
+    }
+    
+    const sourceType = sourceTypes[0];
+    
+    // Vérifier la validité de la transformation
+    if (sourceType === 'FACTURE_PROFORMA' && targetType === 'BON_LIVRAISON') {
+      // Devis vers Bon de Livraison
+      const sourceIds = selectedVentes.map(v => v._id).join(',');
+      navigate(`/vente?type=BON_LIVRAISON&sourceIds=${sourceIds}&sourceType=${sourceType}`);
+    } 
+    else if (sourceType === 'BON_LIVRAISON' && targetType === 'FACTURE_TTC') {
+      // Bon de Livraison vers Facture
+      const sourceIds = selectedVentes.map(v => v._id).join(',');
+      navigate(`/vente?type=FACTURE_TTC&sourceIds=${sourceIds}&sourceType=${sourceType}`);
+    }
+    else {
+      showNotification('Transformation non supportée', 'error');
+    }
+    
+    handleCloseGroupActionMenu();
   };
 
-  // Modifier le rendu des actions groupées
+  // Modification du rendu des actions de groupe pour correspondre aux nouvelles fonctionnalités
   const renderGroupActions = () => {
-    if (selectedVentes.length === 0) return null;
-
-    const allDevis = selectedVentes.every(v => v.typeDocument === 'FACTURE_PROFORMA');
-    const allBL = selectedVentes.every(v => v.typeDocument === 'BON_LIVRAISON');
-    const clientName = selectedVentes[0]?.client?.raisonSociale || 
-      `${selectedVentes[0]?.client?.prenom || ''} ${selectedVentes[0]?.client?.nom || ''}`;
-
-    return (
-      <Box sx={{ mt: 2, mb: 2 }}>
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {selectedVentes.length} document(s) sélectionné(s) pour le client : {clientName}
-        </Alert>
-        <Stack direction="row" spacing={2}>
-          {allDevis && (
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<LocalShipping />}
-              onClick={() => handleTransformGroup('BON_LIVRAISON')}
-            >
-              Transformer en bons de livraison ({selectedVentes.length})
-            </Button>
-          )}
-          {allBL && (
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<ReceiptLong />}
-              onClick={() => handleTransformGroup('FACTURE_TTC')}
-            >
-              Transformer en factures ({selectedVentes.length})
-            </Button>
-          )}
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={() => {
-              setSelectedVentes([]);
-              setSelectedClientId(null);
-              showNotification('Sélection annulée');
-            }}
-          >
-            Annuler la sélection
-          </Button>
-        </Stack>
-      </Box>
-    );
+    // On ne rend plus d'élément flottant, puisque les boutons sont maintenant dans la barre d'outils
+    return null;
   };
 
   // Fonction pour formater les montants
@@ -407,7 +362,7 @@ function VentesList() {
     const value = parseFloat(montant) || 0;
     return new Intl.NumberFormat('fr-FR', {
       style: 'currency',
-      currency: 'EUR',
+      currency: 'TND',
       minimumFractionDigits: 2
     }).format(value);
   };
@@ -505,58 +460,115 @@ function VentesList() {
       </Grid>
     </Grid>
   );
+  
+  // Fonction pour rendre les actions de groupe au-dessus du tableau
+  const renderTransformButtons = () => {
+    if (selectedVentes.length === 0) return null;
+    
+    const sourceTypes = Array.from(new Set(selectedVentes.map(v => v.typeDocument)));
+    const hasSingleSourceType = sourceTypes.length === 1;
+    const sourceType = hasSingleSourceType ? sourceTypes[0] : null;
+    
+    return (
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+            {selectedVentes.length} document(s) sélectionné(s)
+          </Typography>
+          
+          <Button 
+            variant="outlined" 
+            color="error" 
+            size="small"
+            onClick={() => setSelectedVentes([])}
+            startIcon={<Close />}
+          >
+            Annuler
+          </Button>
+          
+          {hasSingleSourceType && (
+            <>
+              {sourceType === 'FACTURE_PROFORMA' && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="small"
+                  startIcon={<LocalShipping />}
+                  onClick={() => handleTransformGroup('BON_LIVRAISON')}
+                >
+                  Transformer en BL
+                </Button>
+              )}
+              
+              {sourceType === 'BON_LIVRAISON' && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="small"
+                  startIcon={<ReceiptLong />}
+                  onClick={() => handleTransformGroup('FACTURE_TTC')}
+                >
+                  Transformer en Facture
+                </Button>
+              )}
+              
+              <Button
+                variant="contained"
+                color="secondary"
+                size="small"
+                startIcon={<Print />}
+                onClick={null /* Implémentation future */}
+              >
+                Imprimer
+              </Button>
+            </>
+          )}
+        </Box>
+      </Paper>
+    );
+  };
 
   // Modifier le rendu du tableau pour mieux gérer les données manquantes
   const renderTable = () => (
-    <TableContainer component={Paper}>
-      <Table>
+    <TableContainer component={Paper} elevation={2}>
+      <Table sx={{ minWidth: 750 }}>
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox">
               <Checkbox
+                color="primary"
                 indeterminate={selectedVentes.length > 0 && selectedVentes.length < ventes.length}
-                checked={selectedVentes.length > 0 && selectedVentes.length === ventes.length}
+                checked={ventes.length > 0 && selectedVentes.length === ventes.length}
                 onChange={(event) => {
                   if (event.target.checked) {
-                    const firstClientId = ventes[0]?.clientId;
-                    if (firstClientId) {
-                      const sameClientVentes = ventes.filter(v => v.clientId === firstClientId);
-                      setSelectedVentes(sameClientVentes);
-                      setSelectedClientId(firstClientId);
-                      showNotification(`${sameClientVentes.length} document(s) sélectionné(s)`);
+                    // Si les documents sont de types différents, ne pas tout sélectionner
+                    const types = new Set(ventes.map(v => v.typeDocument));
+                    if (types.size > 1) {
+                      showNotification('Les documents doivent être du même type pour être sélectionnés ensemble', 'warning');
+                      return;
                     }
+                    // Sinon, tout sélectionner
+                    setSelectedVentes(ventes);
                   } else {
                     setSelectedVentes([]);
-                    setSelectedClientId(null);
-                    showNotification('Sélection annulée');
                   }
                 }}
               />
             </TableCell>
-            <TableCell>Type</TableCell>
-            <TableCell>N° Document</TableCell>
+            <TableCell>Document</TableCell>
             <TableCell>Client</TableCell>
             <TableCell>Date</TableCell>
-            <TableCell align="right">Montant HT</TableCell>
-            <TableCell align="right">TVA</TableCell>
-            <TableCell align="right">Total TTC</TableCell>
-            <TableCell>Mode Paiement</TableCell>
+            <TableCell align="right">Montant</TableCell>
             <TableCell>Statut</TableCell>
             <TableCell align="center">Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {loading ? (
+          {(ventes.length === 0) ? (
             <TableRow>
-              <TableCell colSpan={11} align="center" sx={{ py: 4 }}>
-                <CircularProgress />
-              </TableCell>
-            </TableRow>
-          ) : ventes.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={11} align="center" sx={{ py: 4 }}>
-                <Typography variant="subtitle1" color="text.secondary">
-                  Aucune vente trouvée pour cette période
+              <TableCell colSpan={7} align="center">
+                <Typography variant="body1" sx={{ my: 2 }}>
+                  Aucun document trouvé pour cette période.
                 </Typography>
               </TableCell>
             </TableRow>
@@ -564,95 +576,103 @@ function VentesList() {
             ventes
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
               .map((vente) => {
-                const montantTTC = parseFloat(vente.montantTotalTTC) || 0;
-                const montantHT = parseFloat(vente.montantTotalHT) || 0;
-                const montantTVA = montantTTC - montantHT;
-
+                const isItemSelected = isVenteSelected(vente);
+                const isAvailable = vente.statut !== 'ANNULE';
+                const docType = getDocumentTypeLabel(vente.typeDocument || 'FACTURE_TTC');
+                
                 return (
-                  <TableRow 
+                  <TableRow
+                    hover
                     key={vente._id}
-                    sx={{
-                      bgcolor: isVenteSelected(vente) ? 'action.selected' : 'inherit',
-                      '&:hover': { bgcolor: 'action.hover' }
+                    selected={isItemSelected}
+                    sx={{ 
+                      cursor: 'pointer',
+                      '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                      opacity: isAvailable ? 1 : 0.5
                     }}
+                    onClick={(event) => handleRowClick(event, vente)}
                   >
-                    <TableCell padding="checkbox">
+                    <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
-                        checked={isVenteSelected(vente)}
+                        color="primary"
+                        checked={isItemSelected}
                         onChange={() => handleVenteSelect(vente)}
-                        disabled={selectedClientId !== null && selectedClientId !== vente.clientId}
+                        disabled={!isAvailable}
                       />
                     </TableCell>
-                    <TableCell>
-                      <Tooltip title={getDocumentTypeLabel(vente.typeDocument)}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          {getDocumentTypeIcon(vente.typeDocument)}
-                          <Typography variant="body2" sx={{ ml: 1 }}>
-                            {getDocumentTypeLabel(vente.typeDocument)}
+                    
+                    <TableCell component="th" scope="row">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {getDocumentTypeIcon(vente.typeDocument)}
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                            {docType} #{vente.numeroDocument || vente.numeroFacture || 'N/A'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {vente.notes && vente.notes.length > 30 
+                              ? vente.notes.substring(0, 30) + '...' 
+                              : vente.notes || 'Aucune note'}
                           </Typography>
                         </Box>
-                      </Tooltip>
+                      </Box>
                     </TableCell>
-                    <TableCell sx={{ fontWeight: 'medium' }}>
-                      {vente.numeroFacture || 'N/A'}
-                    </TableCell>
+                    
                     <TableCell>
-                      <Badge
-                        color="primary"
-                        variant="dot"
-                        invisible={!isVenteSelected(vente)}
-                      >
-                        {renderClientName(vente.client)}
-                      </Badge>
+                      {renderClientName(vente.client)}
                     </TableCell>
+                    
                     <TableCell>
-                      {vente.dateVente ? moment(vente.dateVente).format('DD/MM/YYYY HH:mm') : 'N/A'}
+                      <Box>
+                        <Typography variant="body2">
+                          {moment(vente.dateCreation || vente.date).format('DD/MM/YYYY')}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {moment(vente.dateCreation || vente.date).format('HH:mm')}
+                        </Typography>
+                      </Box>
                     </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'medium' }}>
-                      {formatMontant(montantHT)}
-                    </TableCell>
+                    
                     <TableCell align="right">
-                      {formatMontant(montantTVA)}
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {formatMontant(vente.montantTotalTTC)} TTC
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          HT: {formatMontant(vente.montantTotalHT)}
+                        </Typography>
+                      </Box>
                     </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'medium' }}>
-                      {formatMontant(montantTTC)}
-                    </TableCell>
+                    
                     <TableCell>
-                      <Chip
-                        label={vente.modePaiement || 'Non spécifié'}
+                      <Chip 
+                        label={vente.statut || 'TEMPORAIRE'} 
                         size="small"
-                        color="primary"
-                        variant="outlined"
+                        sx={{ 
+                          backgroundColor: getStatusColor(vente.statut),
+                          color: 'white',
+                          fontWeight: 'medium',
+                          minWidth: 80
+                        }}
                       />
                     </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={vente.statut || 'TEMPORAIRE'}
-                        color={getStatusColor(vente.statut)}
-                        size="small"
-                        sx={{ fontWeight: 'medium' }}
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                        <Tooltip title="Détails">
-                          <IconButton onClick={() => navigate(`/ventes/${vente._id}`)}>
-                            <Visibility color="info" />
+                    
+                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
+                        <Tooltip title="Voir les détails">
+                          <IconButton 
+                            size="small"
+                            onClick={() => navigate(`/ventes/${vente._id}`)}
+                          >
+                            <Visibility fontSize="small" />
                           </IconButton>
                         </Tooltip>
                         
-                        <Tooltip title="Imprimer">
-                          <IconButton onClick={() => {
-                            const docType = vente.typeDocument || 'FACTURE_TTC';
-                            window.open(`/api/documents/print/${vente._id}?type=${docType}`, '_blank');
-                          }}>
-                            <Print />
-                          </IconButton>
-                        </Tooltip>
-                        
-                        <Tooltip title="Actions">
-                          <IconButton onClick={(e) => handleOpenActionMenu(e, vente)}>
-                            <MoreVert />
+                        <Tooltip title="Plus d'options">
+                          <IconButton 
+                            size="small"
+                            onClick={(event) => handleOpenActionMenu(event, vente)}
+                          >
+                            <MoreVert fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       </Box>
@@ -674,423 +694,232 @@ function VentesList() {
           setRowsPerPage(parseInt(event.target.value, 10));
           setPage(0);
         }}
-        labelRowsPerPage="Lignes par page"
+        labelRowsPerPage="Lignes par page:"
         labelDisplayedRows={({ from, to, count }) => `${from}-${to} sur ${count}`}
       />
     </TableContainer>
   );
 
-  const handleTransformDevis = () => {
-    console.log('handleTransformDevis called');
-    console.log('Selected ventes:', selectedVentes);
-    
-    const selectedDevis = selectedVentes.filter(vente => vente.typeDocument === 'FACTURE_PROFORMA');
-    console.log('Selected devis:', selectedDevis);
-    
-    if (selectedDevis.length === 0) {
-      console.log('No devis selected');
-      setSnackbar({
-        open: true,
-        message: 'Veuillez sélectionner au moins un devis à transformer',
-        severity: 'warning'
-      });
-      return;
-    }
-
-    const hasTransformedDevis = selectedDevis.some(devis => devis.statut === 'TRANSFORME');
-    console.log('Has transformed devis:', hasTransformedDevis);
-    
-    if (hasTransformedDevis) {
-      console.log('Some devis are already transformed');
-      setSnackbar({
-        open: true,
-        message: 'Un ou plusieurs devis sélectionnés ont déjà été transformés',
-        severity: 'error'
-      });
-      return;
-    }
-
-    console.log('Opening transform dialog');
-    setTransformDialogOpen(true);
-  };
-
-  const handleCloseTransformDialog = () => {
-    setTransformDialogOpen(false);
-  };
-
-  const renderToolbar = () => {
-    const hasSelectedDevis = selectedVentes.some(vente => 
-      vente.typeDocument === 'FACTURE_PROFORMA' && vente.statut !== 'TRANSFORME'
-    );
-    console.log('Has selected devis for toolbar:', hasSelectedDevis);
-    console.log('Selected ventes for toolbar:', selectedVentes);
-
-    return (
-      <Toolbar
-        sx={{
-          pl: { sm: 2 },
-          pr: { xs: 1, sm: 1 },
-          ...(selectedVentes.length > 0 && {
-            bgcolor: (theme) =>
-              alpha(theme.palette.primary.main, theme.palette.action.activatedOpacity),
-          }),
-        }}
-      >
-        {selectedVentes.length > 0 ? (
-          <Typography
-            sx={{ flex: '1 1 100%' }}
-            color="inherit"
-            variant="subtitle1"
-            component="div"
-          >
-            {selectedVentes.length} élément(s) sélectionné(s)
-          </Typography>
-        ) : (
-          <Typography
-            sx={{ flex: '1 1 100%' }}
-            variant="h6"
-            id="tableTitle"
-            component="div"
-          >
-            Ventes
-          </Typography>
-        )}
-
-        {selectedVentes.length > 0 ? (
-          <>
-            {hasSelectedDevis && (
-              <Tooltip title="Transformer en bon de livraison">
-                <IconButton onClick={handleTransformDevis}>
-                  <Transform />
-                </IconButton>
-              </Tooltip>
-            )}
-            <Tooltip title="Supprimer">
-              <IconButton onClick={handleDelete}>
-                <Delete />
-              </IconButton>
-            </Tooltip>
-          </>
-        ) : (
-          <>
-            <Tooltip title="Filtrer">
-              <IconButton onClick={handleFilterClick}>
-                <FilterList />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Rechercher">
-              <IconButton onClick={handleSearchClick}>
-                <Search />
-              </IconButton>
-            </Tooltip>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<Add />}
-              onClick={handleCreateNew}
-              sx={{ ml: 2 }}
-            >
-              Nouveau
-            </Button>
-          </>
-        )}
-      </Toolbar>
-    );
-  };
-
   const handleRowClick = (event, row) => {
     navigate(`/ventes/${row._id}`);
   };
 
-  return (
-    <Container maxWidth="xl">
-      <Box sx={{ my: 4 }}>
-        <Grid container spacing={3} justifyContent="space-between">
+  // Fonction pour rendre la barre d'outils avec les filtres et les boutons d'action
+  const renderToolbar = () => {
+    return (
+      <Box sx={{ p: 2, borderBottom: '1px solid rgba(0, 0, 0, 0.12)' }}>
+        <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={6}>
-            <Typography variant="h4" gutterBottom>Historique des ventes</Typography>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 2 }}>
+            <Typography variant="h5">Historique des ventes</Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
               {periodes.map((periode) => (
-                <Button
+                <Chip
                   key={periode.value}
-                  variant={filters.selectedPeriod === periode.value ? 'contained' : 'outlined'}
+                  label={periode.label}
+                  variant={filters.selectedPeriod === periode.value ? 'filled' : 'outlined'}
+                  color={filters.selectedPeriod === periode.value ? 'primary' : 'default'}
                   size="small"
                   onClick={() => setFilters(prev => ({ ...prev, selectedPeriod: periode.value }))}
-                >
-                  {periode.label}
-                </Button>
+                />
               ))}
             </Box>
           </Grid>
           
           <Grid item xs={12} md={6}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: { xs: 'stretch', md: 'flex-end' } }}>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: '100%', justifyContent: { xs: 'stretch', md: 'flex-end' } }}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={<Add />}
-                  onClick={handleNewVente}
-                  fullWidth
-                >
-                  Nouvelle Facture
-                </Button>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  startIcon={<Add />}
-                  onClick={handleNewDevis}
-                  fullWidth
-                >
-                  Nouveau Devis
-                </Button>
-                <Button
-                  variant="contained"
-                  color="info"
-                  startIcon={<Add />}
-                  onClick={handleNewBonLivraison}
-                  fullWidth
-                >
-                  Bon de Livraison
-                </Button>
-              </Stack>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+              <TextField
+                placeholder="Rechercher..."
+                size="small"
+                value={filters.searchQuery}
+                onChange={(e) => setFilters(prev => ({ ...prev, searchQuery: e.target.value }))}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search fontSize="small" />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ width: 250 }}
+              />
+              
+              <Button 
+                variant="outlined" 
+                startIcon={<FilterList />}
+                onClick={handleOpenFilterMenu}
+                size="small"
+              >
+                Filtres
+              </Button>
+              
+              {/* Boutons de création - toujours affichés */}
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<Add />}
+                onClick={handleNewVente}
+                size="small"
+              >
+                Facture
+              </Button>
+              
+              <Button
+                variant="contained"
+                color="secondary"
+                startIcon={<Add />}
+                onClick={handleNewDevis}
+                size="small"
+              >
+                Devis
+              </Button>
+              
+              <Button
+                variant="contained"
+                color="info"
+                startIcon={<Add />}
+                onClick={handleNewBonLivraison}
+                size="small"
+              >
+                BL
+              </Button>
             </Box>
           </Grid>
         </Grid>
-
-        {renderStats()}
-
-        {/* Filtres et recherche */}
-        <Paper sx={{ p: 2, mb: 3 }} elevation={2}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={5}>
-              <Stack direction="row" spacing={2}>
-                <TextField
-                  label="Début"
-                  type="date"
-                  size="small"
-                  value={moment(filters.dateRange[0]).format('YYYY-MM-DD')}
-                  onChange={(e) => {
-                    const newDate = new Date(e.target.value);
-                    setFilters(prev => ({
-                      ...prev,
-                      dateRange: [newDate, prev.dateRange[1]],
-                      selectedPeriod: 'custom'
-                    }))
-                  }}
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                />
-                <TextField
-                  label="Fin"
-                  type="date"
-                  size="small"
-                  value={moment(filters.dateRange[1]).format('YYYY-MM-DD')}
-                  onChange={(e) => {
-                    const newDate = new Date(e.target.value);
-                    setFilters(prev => ({
-                      ...prev,
-                      dateRange: [prev.dateRange[0], newDate],
-                      selectedPeriod: 'custom'
-                    }))
-                  }}
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                />
-              </Stack>
-            </Grid>
+        
+        {/* Menu de filtres avancés */}
+        <Menu
+          anchorEl={filterMenuAnchor}
+          open={Boolean(filterMenuAnchor)}
+          onClose={handleCloseFilterMenu}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Box sx={{ p: 2, width: 300 }}>
+            <Typography variant="subtitle1" gutterBottom>Filtres avancés</Typography>
             
-            <Grid item xs={12} md={7}>
-              <Stack direction="row" spacing={2}>
-                <TextField
-                  label="Recherche"
-                  variant="outlined"
-                  size="small"
-                  fullWidth
-                  value={filters.searchQuery}
-                  onChange={(e) => setFilters(prev => ({ ...prev, searchQuery: e.target.value }))}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Search fontSize="small" />
-                      </InputAdornment>
-                    ),
-                  }}
-                  placeholder="N° facture, client, montant..."
-                />
-                
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <Select
-                    displayEmpty
-                    value={filters.typeDocument}
-                    onChange={(e) => setFilters(prev => ({ ...prev, typeDocument: e.target.value }))}
-                    renderValue={(selected) => {
-                      if (!selected) return "Type de document";
-                      const type = documentTypes.find(t => t.value === selected);
-                      return type ? type.label : selected;
-                    }}
-                  >
-                    {documentTypes.map(option => (
-                      <MenuItem key={option.value} value={option.value}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {option.icon && <Box sx={{ color: 'primary.main' }}>{option.icon}</Box>}
-                          {option.label}
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <Select
-                    displayEmpty
-                    value={filters.statut}
-                    onChange={(e) => setFilters(prev => ({ ...prev, statut: e.target.value }))}
-                    renderValue={(selected) => !selected ? "Statut" : statusOptions.find(s => s.value === selected)?.label || selected}
-                  >
-                    {statusOptions.map(option => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                
-                <Button 
-                  variant="outlined" 
-                  color="inherit" 
-                  onClick={handleResetFilters}
-                  size="small"
-                >
-                  Réinitialiser
-                </Button>
-              </Stack>
-            </Grid>
-          </Grid>
-        </Paper>
+            <TextField
+              label="Date début"
+              type="date"
+              fullWidth
+              margin="dense"
+              value={moment(filters.dateRange[0]).format('YYYY-MM-DD')}
+              onChange={(e) => {
+                const newDate = new Date(e.target.value);
+                setFilters(prev => ({
+                  ...prev,
+                  dateRange: [newDate, prev.dateRange[1]],
+                  selectedPeriod: 'custom'
+                }))
+              }}
+              InputLabelProps={{ shrink: true }}
+            />
+            
+            <TextField
+              label="Date fin"
+              type="date"
+              fullWidth
+              margin="dense"
+              value={moment(filters.dateRange[1]).format('YYYY-MM-DD')}
+              onChange={(e) => {
+                const newDate = new Date(e.target.value);
+                setFilters(prev => ({
+                  ...prev,
+                  dateRange: [prev.dateRange[0], newDate],
+                  selectedPeriod: 'custom'
+                }))
+              }}
+              InputLabelProps={{ shrink: true }}
+            />
+            
+            <FormControl fullWidth margin="dense">
+              <Typography variant="caption">Type de document</Typography>
+              <Select
+                displayEmpty
+                size="small"
+                value={filters.typeDocument}
+                onChange={(e) => setFilters(prev => ({ ...prev, typeDocument: e.target.value }))}
+              >
+                {documentTypes.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {option.icon && option.icon}
+                      {option.label}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            <FormControl fullWidth margin="dense">
+              <Typography variant="caption">Statut</Typography>
+              <Select
+                displayEmpty
+                size="small"
+                value={filters.statut}
+                onChange={(e) => setFilters(prev => ({ ...prev, statut: e.target.value }))}
+              >
+                {statusOptions.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between' }}>
+              <Button 
+                variant="outlined" 
+                color="inherit" 
+                size="small"
+                onClick={handleResetFilters}
+              >
+                Réinitialiser
+              </Button>
+              
+              <Button 
+                variant="contained" 
+                color="primary" 
+                size="small"
+                onClick={handleCloseFilterMenu}
+              >
+                Appliquer
+              </Button>
+            </Box>
+          </Box>
+        </Menu>
+      </Box>
+    );
+  };
 
-        {renderGroupActions()}
-        {renderTable()}
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {renderToolbar()}
+      
+      <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+        <Container maxWidth="xl">
+          {renderStats()}
+          {renderTransformButtons()}
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            renderTable()
+          )}
+        </Container>
       </Box>
       
-      {/* Menu contextuel pour la conversion de documents */}
-      <Menu
-        anchorEl={actionMenuAnchor}
-        open={Boolean(actionMenuAnchor)}
-        onClose={handleCloseActionMenu}
-      >
-        <Typography variant="subtitle2" sx={{ px: 2, py: 1, fontWeight: 'bold' }}>
-          Actions
-        </Typography>
-        <Divider />
-        
-        {/* Options d'impression */}
-        <MenuItem onClick={() => {
-          handleCloseActionMenu();
-          // Logique d'impression du document actuel
-          const docType = selectedVente.typeDocument || 'FACTURE_TTC';
-          window.open(`/api/documents/print/${selectedVente._id}?type=${docType}`, '_blank');
-        }}>
-          <Print fontSize="small" sx={{ mr: 1 }} />
-          Imprimer ce document
-        </MenuItem>
-        
-        <MenuItem onClick={() => navigate(`/vente?sourceId=${selectedVente?._id}&sourceType=${selectedVente?.typeDocument || 'FACTURE_TTC'}`)}>
-          <Edit fontSize="small" sx={{ mr: 1 }} />
-          Modifier ce document
-        </MenuItem>
-        
-        <Divider />
-        <Typography variant="subtitle2" sx={{ px: 2, py: 1, fontWeight: 'bold' }}>
-          Convertir en
-        </Typography>
-        <Divider />
-        
-        {/* BL → Facture */}
-        {selectedVente?.typeDocument === 'BON_LIVRAISON' && (
-          <MenuItem onClick={() => handleConvertDocument('BON_LIVRAISON', 'FACTURE_TTC')}>
-            <ArrowForward fontSize="small" sx={{ mr: 1 }} />
-            Créer une facture
-          </MenuItem>
-        )}
-        
-        {/* Devis → BL */}
-        {selectedVente?.typeDocument === 'FACTURE_PROFORMA' && (
-          <MenuItem onClick={() => {
-            handleCloseActionMenu();
-            setSelectedVentes([selectedVente]);
-            setTransformDialogOpen(true);
-          }}>
-            <ArrowForward fontSize="small" sx={{ mr: 1 }} />
-            Créer un bon de livraison
-          </MenuItem>
-        )}
-        
-        {/* Devis → Facture */}
-        {selectedVente?.typeDocument === 'FACTURE_PROFORMA' && (
-          <MenuItem onClick={() => handleConvertDocument('FACTURE_PROFORMA', 'FACTURE_TTC')}>
-            <ArrowForward fontSize="small" sx={{ mr: 1 }} />
-            Créer une facture
-          </MenuItem>
-        )}
-        
-        {/* Facture → Avoir */}
-        {selectedVente?.typeDocument === 'FACTURE_TTC' && (
-          <MenuItem onClick={() => handleConvertDocument('FACTURE_TTC', 'AVOIR')}>
-            <ArrowForward fontSize="small" sx={{ mr: 1 }} />
-            Créer un avoir
-          </MenuItem>
-        )}
-        
-        {/* Facture partielle → Paiement complémentaire */}
-        {selectedVente?.typeDocument === 'FACTURE_TTC' && selectedVente?.montantRegle < selectedVente?.montantTotalTTC && (
-          <MenuItem onClick={() => handleConvertDocument('FACTURE_PARTIELLE', 'FACTURE_TTC')}>
-            <ArrowForward fontSize="small" sx={{ mr: 1 }} />
-            Compléter le paiement
-          </MenuItem>
-        )}
-        
-        <Divider />
-        <MenuItem onClick={() => {
-          handleCloseActionMenu();
-          // Logique de suppression à implémenter
-          if (window.confirm(`Êtes-vous sûr de vouloir supprimer ce document ${selectedVente?.numeroFacture}?`)) {
-            // Appel API de suppression à implémenter
-            apiClient.delete(`api/ventes/${selectedVente?._id}`)
-              .then(() => {
-                setFilters(prev => ({ ...prev })); // Forcer un refresh
-              })
-              .catch(error => {
-                console.error('Erreur lors de la suppression:', error);
-                alert('Erreur lors de la suppression du document');
-              });
-          }
-        }}>
-          <Delete fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
-          <Typography color="error.main">Supprimer</Typography>
-        </MenuItem>
-      </Menu>
+      {renderGroupActions()}
       
-      {/* Snackbar pour les notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={6000} 
+        onClose={() => setSnackbar({...snackbar, open: false})}
       >
-        <Alert 
-          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} 
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
-        >
+        <Alert onClose={() => setSnackbar({...snackbar, open: false})} severity={snackbar.severity}>
           {snackbar.message}
         </Alert>
       </Snackbar>
-
-      <TransformDevisDialog
-        open={transformDialogOpen}
-        onClose={handleCloseTransformDialog}
-        selectedDevisIds={selectedVentes.map(vente => vente._id)}
-      />
-    </Container>
+    </Box>
   );
 }
 

@@ -92,6 +92,7 @@ require('./models/achat.model');
 require('./models/caisse.model');
 require('./models/notification.model');
 require('./models/document.model');
+require('./models/categorieArticle.model');
 
 // Routes
 const userRoutes = require('./routes/user.routes');
@@ -119,11 +120,20 @@ const documentRoutes = require('./routes/document.routes');
 const fileRoutes = require('./routes/file.routes');
 const ocrRoutes = require('./routes/ocr.routes'); // Ajouter les routes OCR
 
-// Application des routes
+// Application des routes (ordre important : routes spécifiques avant routes génériques)
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+
+// Routes spécifiques avant les routes génériques
+app.use('/api/articles/search', (req, res, next) => {
+  // Rediriger vers le contrôleur de recherche
+  req.url = '/search' + (req.url !== '/' ? req.url : '');
+  articleRoutes(req, res, next);
+});
+
 app.use('/api/articles', articleRoutes);
 app.use('/api/tiers', tierRoutes);
+app.use('/api/clients', tierRoutes); // Alias pour les routes clients spécifiques
 app.use('/api/documents', documentRoutes);
 app.use('/api/echeances', echeanceRoutes);
 app.use('/api/echeanciers', echeancierRoutes);
@@ -139,10 +149,12 @@ app.use('/api/caisse', caisseRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/comptes', compteBancaireRoutes);
 app.use('/api/recurrences', recurrenceRoutes);
-app.use('/api/notifications', notificationRoutes); // Ajout du point-virgule
-app.use('/api/categories', categorieRoutes); // Utilisation de la variable importée
-app.use('/api/ocr', ocrRoutes); // Ajouter les routes OCR
-app.use('/api', dataRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/categories', categorieRoutes);
+app.use('/api/ocr', ocrRoutes);
+app.use('/api/files', fileRoutes);
+app.use('/api/parametres', require('./routes/parametres.routes'));
+app.use('/api', dataRoutes); // Cette route doit être en dernier pour les routes /api génériques
 
 // Dossier pour les fichiers statiques
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

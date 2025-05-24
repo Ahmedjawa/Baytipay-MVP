@@ -1,7 +1,7 @@
 // client/src/App.js - Point d'entrée de l'application React
 
-import React, { useEffect, useState } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import rtlPlugin from 'stylis-plugin-rtl';
@@ -9,6 +9,12 @@ import { CacheProvider } from '@emotion/react';
 import createCache from '@emotion/cache';
 import { prefixer } from 'stylis';
 import { Box, CircularProgress } from '@mui/material';
+import { 
+  createBrowserRouter, 
+  RouterProvider,
+  createRoutesFromElements,
+  Route as RouterRoute
+} from 'react-router-dom';
 
 // Contexte d'authentification
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -90,36 +96,46 @@ const AppRoutes = ({ setDirection }) => {
     );
   }
 
-  return (
-    <Routes>
-      <Route 
+  const router = createBrowserRouter(
+    createRoutesFromElements(
+      <>
+        <RouterRoute 
         path="/" 
         element={!user ? <Navigate to="/login" /> : <Navigate to="/dashboard" />} 
       />
       {/* Route publique pour la connexion */}
-      <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
-      <Route path="/register" element={!user ? <Register /> : <Navigate to="/dashboard" />} />
+        <RouterRoute path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
+        <RouterRoute path="/register" element={!user ? <Register /> : <Navigate to="/dashboard" />} />
       
       {/* Routes protégées nécessitant une authentification */}
-      <Route element={<Layout setDirection={setDirection} />}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/tiers" element={<TiersPage />} />
-        <Route path="/articles" element={<ArticlesPage />} />
-        <Route path="/depense" element={<DepensePage />} />
-        <Route path="/achat" element={<AchatPage />} />
-        <Route path="/achats" element={<AchatsList />} />
-        <Route path="/vente" element={<VentePage />} />
-        <Route path="/ventes" element={<VentesList />} />
-        <Route path="/ventes/:id" element={<VenteDetails />} />
-        <Route path="/transactions" element={<TransactionsPage />} />
-        <Route path="/caisse" element={<CaissePage />} />
-        <Route path="/scan" element={<ScanPage />} /> 
-        <Route path="/chatbot" element={<ChatbotPage />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
+        <RouterRoute element={<Layout setDirection={setDirection} />}>
+          <RouterRoute path="/dashboard" element={<Dashboard />} />
+          <RouterRoute path="/tiers" element={<TiersPage />} />
+          <RouterRoute path="/articles" element={<ArticlesPage />} />
+          <RouterRoute path="/depense" element={<DepensePage />} />
+          <RouterRoute path="/achat" element={<AchatPage />} />
+          <RouterRoute path="/achats" element={<AchatsList />} />
+          <RouterRoute path="/vente" element={<VentePage />} />
+          <RouterRoute path="/ventes" element={<VentesList />} />
+          <RouterRoute path="/ventes/:id" element={<VenteDetails />} />
+          <RouterRoute path="/transactions" element={<TransactionsPage />} />
+          <RouterRoute path="/caisse" element={<CaissePage />} />
+          <RouterRoute path="/scan" element={<ScanPage />} /> 
+          <RouterRoute path="/chatbot" element={<ChatbotPage />} />
+          <RouterRoute path="/settings" element={<Settings />} />
+          <RouterRoute path="*" element={<NotFound />} />
+        </RouterRoute>
+      </>
+    ),
+    {
+      future: {
+        v7_startTransition: true,
+        v7_relativeSplatPath: true
+      }
+    }
   );
+
+  return <RouterProvider router={router} />;
 };
 
 // Composant principal
@@ -138,9 +154,7 @@ const App = () => {
     <AuthProvider>
       <ThemeProvider theme={themeWithDirection}>
         <CssBaseline />
-        <Router>
           <AppRoutes setDirection={setDirection} />
-        </Router>
       </ThemeProvider>
     </AuthProvider>
   );

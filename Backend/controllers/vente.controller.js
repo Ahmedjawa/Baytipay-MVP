@@ -906,3 +906,185 @@ exports.sauvegarderBonLivraison = async (req, res) => {
     session.endSession();
   }
 };
+
+/**
+ * Transformer plusieurs documents sources en un seul document cible
+ * @param {Object} req - Requête Express contenant les IDs des documents sources et les types source/cible
+ * @param {Object} res - Réponse Express
+ */
+exports.transformerDocuments = async (req, res) => {
+  try {
+    const { documentIds, sourceType, targetType } = req.body;
+    
+    console.log('Requête de transformation reçue:', { documentIds, sourceType, targetType });
+    
+    if (!documentIds || !Array.isArray(documentIds) || documentIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Liste des IDs de documents invalide'
+      });
+    }
+    
+    if (!sourceType || !targetType) {
+      return res.status(400).json({
+        success: false,
+        error: 'Types de documents source et cible requis'
+      });
+    }
+    
+    // Vérifier les types valides
+    const validTypes = ['FACTURE_PROFORMA', 'BON_LIVRAISON', 'FACTURE_TTC'];
+    if (!validTypes.includes(sourceType) || !validTypes.includes(targetType)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Types de documents non pris en charge'
+      });
+    }
+    
+    // Vérifier les combinaisons valides
+    const validTransformations = [
+      { source: 'FACTURE_PROFORMA', target: 'BON_LIVRAISON' },
+      { source: 'BON_LIVRAISON', target: 'FACTURE_TTC' }
+    ];
+    
+    const isValidTransformation = validTransformations.some(
+      t => t.source === sourceType && t.target === targetType
+    );
+    
+    if (!isValidTransformation) {
+      return res.status(400).json({
+        success: false,
+        error: `La transformation de ${sourceType} vers ${targetType} n'est pas prise en charge`
+      });
+    }
+    
+    // Récupérer tous les documents sources
+    const sourceDocuments = await Vente.find({
+      _id: { $in: documentIds },
+      typeDocument: sourceType
+    }).populate('clientId').populate('articles').populate('transaction');
+    
+    console.log(`Nombre de documents sources trouvés: ${sourceDocuments.length}`);
+    
+    if (sourceDocuments.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Aucun document source trouvé'
+      });
+    }
+    
+    // Récupérer le client (peut être sous clientId plutôt que client)
+    const clientProperty = sourceDocuments[0].client || sourceDocuments[0].clientId;
+    
+    if (!clientProperty) {
+      return res.status(400).json({
+        success: false,
+        error: 'Client introuvable dans les documents sources'
+      });
+    }
+    
+    // Vérifier que tous les documents ont le même client
+    const clientIds = new Set(sourceDocuments.map(doc => {
+      const client = doc.client || doc.clientId;
+      return client ? client._id.toString() : null;
+    }));
+    
+    if (clientIds.size > 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'Les documents doivent concerner le même client'
+      });
+    }
+    
+    // Agréger les articles de tous les documents
+    const allArticles = [];
+    sourceDocuments.forEach(doc => {
+      // Utiliser la propriété correcte pour les articles
+      const articlesProperty = doc.articles || doc.articlesArray || (doc.transaction && doc.transaction.lignes) || [];
+      
+      if (articlesProperty && Array.isArray(articlesProperty)) {
+        articlesProperty.forEach(article => {
+          // Convertir l'article en objet simple si c'est un document mongoose
+          const articleObject = article.toObject ? article.toObject() : {...article};
+          
+          // Déterminer l'ID de l'article
+          const articleId = articleObject.articleId || articleObject.article || articleObject._id;
+          
+          if (!articleId) {
+            console.warn('Article sans ID trouvé:', articleObject);
+            return; // Sauter cet article
+          }
+          
+          // Vérifier si l'article existe déjà dans allArticles
+          const existingArticleIndex = allArticles.findIndex(a => {
+            const aId = a.articleId || a.article || a._id;
+            return aId && articleId && aId.toString() === articleId.toString();
+          });
+          
+          if (existingArticleIndex >= 0) {
+            // Si l'article existe, incrémenter la quantité
+            allArticles[existingArticleIndex].quantite += (articleObject.quantite || 1);
+          } else {
+            // Sinon, ajouter le nouvel article
+            allArticles.push(articleObject);
+          }
+        });
+      } else {
+        console.warn('Aucun article trouvé pour le document:', doc._id);
+      }
+    });
+    
+    console.log(`Nombre total d'articles agrégés: ${allArticles.length}`);
+    
+    // Calculer les totaux
+    let sousTotal = 0;
+    let totalTTC = 0;
+    let montantTaxes = 0;
+    
+    allArticles.forEach(article => {
+      const prixUnitaire = parseFloat(article.prixUnitaire) || 0;
+      const quantite = parseInt(article.quantite) || 0;
+      const tauxTVA = parseFloat(article.tauxTVA || article.tva) || 0;
+      const remise = parseFloat(article.remise) || 0;
+      
+      const prixHT = prixUnitaire * quantite * (1 - remise / 100);
+      const prixTTC = prixHT * (1 + tauxTVA / 100);
+      
+      sousTotal += prixHT;
+      totalTTC += prixTTC;
+    });
+    
+    montantTaxes = totalTTC - sousTotal;
+    
+    // Préparer les données pour le document cible
+    const transformationData = {
+      client: clientProperty,
+      articles: allArticles,
+      sousTotal,
+      tva: montantTaxes,
+      totalTTC,
+      notes: `Document créé à partir de ${documentIds.length} ${sourceType === 'FACTURE_PROFORMA' ? 'devis' : 'bons de livraison'}`
+    };
+    
+    // Si la transformation est de BL vers facture, inclure les infos de paiement du premier BL
+    if (sourceType === 'BON_LIVRAISON' && targetType === 'FACTURE_TTC') {
+      transformationData.modePaiement = sourceDocuments[0].modePaiement || 'especes';
+      transformationData.paiementDetails = sourceDocuments[0].paiementDetails || {};
+      transformationData.echeancier = sourceDocuments[0].echeancier || [];
+    }
+    
+    console.log('Données de transformation générées avec succès');
+    
+    return res.json({
+      success: true,
+      data: transformationData
+    });
+    
+  } catch (error) {
+    console.error('Erreur lors de la transformation des documents:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Erreur lors de la transformation des documents'
+    });
+  }
+};

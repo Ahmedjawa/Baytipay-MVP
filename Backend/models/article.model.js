@@ -28,6 +28,27 @@ const ArticleSchema = new mongoose.Schema({
     default: 0,
     min: [0, 'Le prix d\'achat doit être positif']
   },
+  prixAchatMoyen: {
+    type: Number,
+    default: 0,
+    min: [0, 'Le prix d\'achat moyen doit être positif']
+  },
+  dernierPrixAchat: {
+    type: Number,
+    default: 0,
+    min: [0, 'Le dernier prix d\'achat doit être positif']
+  },
+  codeBarre: {
+    type: String,
+    trim: true,
+    unique: true,
+    sparse: true // Permet d'avoir des valeurs null/undefined
+  },
+  categorie: {
+    type: String,
+    required: [true, 'La catégorie est obligatoire'],
+    trim: true
+  },
   tauxTaxe: {
     type: Number,
     default: 0,
@@ -54,5 +75,7 @@ const ArticleSchema = new mongoose.Schema({
 // Index pour les recherches fréquentes
 ArticleSchema.index({ designation: 1 });
 ArticleSchema.index({ type: 1, actif: 1 });
+ArticleSchema.index({ categorie: 1 });
+ArticleSchema.index({ codeBarre: 1 });
 
 module.exports = mongoose.model('Article', ArticleSchema, 'articles');

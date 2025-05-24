@@ -1,6 +1,7 @@
 // controllers/transaction.controller.js
 
 const Transaction = require('../models/transaction.model');
+const LigneTransaction = require('../models/ligneTransaction.model');
 
 const transactionController = {
 // Récupérer toutes les transactions
@@ -35,6 +36,32 @@ res.status(200).json(transaction);
 } catch (error) {
 res.status(500).json({ message: "Erreur lors de la récupération de la transaction", error: error.message });
 }
+},
+
+// Récupérer les lignes d'une transaction par ID
+getLignesTransaction: async (req, res) => {
+  try {
+    const transactionId = req.params.id;
+    
+    // Vérifier si la transaction existe
+    const transaction = await Transaction.findById(transactionId);
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction non trouvée" });
+    }
+    
+    // Récupérer les lignes de transaction avec les détails de l'article
+    const lignes = await LigneTransaction.find({ transactionId })
+      .populate('articleId')
+      .sort({ designation: 1 });
+    
+    res.status(200).json(lignes);
+  } catch (error) {
+    console.error("Erreur lors de la récupération des lignes:", error);
+    res.status(500).json({ 
+      message: "Erreur lors de la récupération des lignes de transaction", 
+      error: error.message 
+    });
+  }
 },
 
 // Créer une nouvelle transaction

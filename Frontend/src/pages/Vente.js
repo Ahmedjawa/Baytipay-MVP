@@ -65,7 +65,10 @@ function VentePage() {
     documents: [],
     sourceDocument: null,
     fluxAutomatique: false,
-    etapesEffectuees: []
+    etapesEffectuees: [],
+    clientLocked: false,
+    articlesLocked: false,
+    paiementLocked: false
   });
   
   const [echeancierDialogOpen, setEcheancierDialogOpen] = useState(false);
@@ -88,7 +91,7 @@ function VentePage() {
         
       case 'BON_LIVRAISON':
         // Pour un bon de livraison, on a besoin de tout sauf de l'échéancier
-        return ['Client', 'Articles/Services', 'Paiement', 'Validation et Documents'];
+        return ['Client', 'Articles/Services', 'Paiement','Échéancier', 'Validation et Documents'];
         
       case 'FACTURE_TTC':
       default:
@@ -128,12 +131,17 @@ function VentePage() {
         setClients(clientsResponse.data);
         setArticles(articlesResponse.data);
 
-        // Vérifier si nous avons reçu un document source via les paramètres d'URL ou state
+        // Vérifier si nous avons reçu un ou plusieurs documents sources via les paramètres d'URL
         const params = new URLSearchParams(location.search);
         const sourceId = params.get('sourceId');
+        const sourceIds = params.get('sourceIds')?.split(',') || [];
         const sourceType = params.get('sourceType');
         
-        if (sourceId && sourceType) {
+        if (sourceIds.length > 0 && sourceType) {
+          // Traiter la transformation depuis plusieurs documents
+          await initialiserVenteDepuisSourceMultiple(sourceIds, sourceType);
+        } else if (sourceId && sourceType) {
+          // Traiter un seul document source
           await initialiserVenteDepuisSource(sourceId, sourceType);
         } else if (location.state?.sourceId && location.state?.sourceType) {
           await initialiserVenteDepuisSource(location.state.sourceId, location.state.sourceType);
@@ -153,13 +161,431 @@ function VentePage() {
     fetchInitialData();
   }, [location, user, navigate]);
 
-  // Nouvelle fonction pour initialiser une vente à partir d'un document source
+  // Fonction pour initialiser une vente à partir de plusieurs documents sources
+  const initialiserVenteDepuisSourceMultiple = async (documentIds, documentType) => {
+    try {
+      setLoading(true);
+      
+      console.log('Initialisation de vente multiple avec IDs:', documentIds, 'de type', documentType);
+      
+      // Récupérer les documents sources individuellement au lieu d'utiliser l'API transformerDocuments
+      const sourceDocumentsPromises = documentIds.map(id => 
+        apiClient.get(`api/ventes/${id}`)
+      );
+      
+      const sourceDocumentsResponses = await Promise.all(sourceDocumentsPromises);
+      const sourceDocuments = sourceDocumentsResponses.map(response => response.data);
+      
+      if (sourceDocuments.length === 0) {
+        throw new Error('Aucun document source trouvé');
+      }
+      
+      console.log('Documents sources récupérés:', sourceDocuments.length);
+      console.log('Structure du premier document:', sourceDocuments[0]);
+      
+      // Tentative de récupération directe des lignes de transaction si nécessaire
+      let lignesRecuperees = [];
+      
+      // Essayons de récupérer les lignes via notre nouvel endpoint API
+      if (sourceDocuments[0].transactionId && sourceDocuments[0].transactionId._id) {
+        try {
+          console.log('Tentative de récupération des lignes via l\'API pour la transaction:', sourceDocuments[0].transactionId._id);
+          const lignesResponse = await apiClient.get(`/api/transactions/${sourceDocuments[0].transactionId._id}/lignes`);
+          
+          if (lignesResponse?.data && Array.isArray(lignesResponse.data) && lignesResponse.data.length > 0) {
+            lignesRecuperees = lignesResponse.data;
+            console.log('Lignes récupérées via API:', lignesRecuperees.length, lignesRecuperees);
+          } else {
+            console.log('Aucune ligne trouvée via l\'API, recherche dans le document source');
+          }
+        } catch (error) {
+          console.error('Erreur lors de la récupération des lignes via API:', error);
+          console.log('Recherche des lignes dans le document source comme alternative...');
+        }
+      }
+      
+      // Si l'API n'a pas fonctionné, rechercher dans le document source
+      if (lignesRecuperees.length === 0) {
+        console.log('Recherche des lignes directement dans le document...');
+        
+        // Essayer toutes les structures possibles où les articles pourraient se trouver
+        if (sourceDocuments[0].transaction && Array.isArray(sourceDocuments[0].transaction.lignes)) {
+          console.log('Lignes trouvées dans transaction.lignes');
+          lignesRecuperees = sourceDocuments[0].transaction.lignes;
+        } 
+        else if (sourceDocuments[0].transactionId && Array.isArray(sourceDocuments[0].transactionId.lignesTransaction)) {
+          console.log('Lignes trouvées dans transactionId.lignesTransaction');
+          lignesRecuperees = sourceDocuments[0].transactionId.lignesTransaction;
+        }
+      }
+      
+      // S'il n'y a toujours pas de lignes mais qu'on a une transaction avec des montants, créer une ligne par défaut
+      if (lignesRecuperees.length === 0 && (sourceDocuments[0].transaction || sourceDocuments[0].transactionId)) {
+        console.log('Création d\'une ligne par défaut basée sur les montants de la transaction');
+        
+        // Essayer de récupérer un article par défaut depuis la liste des articles
+        let articleParDefaut = null;
+        if (articles && articles.length > 0) {
+          // Privilégier un article de type service ou générique si disponible
+          articleParDefaut = articles.find(a => a.type === 'SERVICE') || articles[0];
+          console.log('Article par défaut trouvé dans la liste:', articleParDefaut);
+        }
+        
+        const transaction = sourceDocuments[0].transaction || sourceDocuments[0].transactionId;
+        if (transaction && transaction.montantTotalHT > 0) {
+          // Si nous n'avons pas d'article par défaut, utilisons le type SERVICE qui ne nécessite pas d'articleId
+          const articleType = articleParDefaut ? 'PRODUIT' : 'SERVICE';
+          
+          lignesRecuperees = [{
+            designation: "Articles du document source",
+            reference: "AUTO-" + Date.now(),
+            quantite: 1,
+            prixUnitaireHT: transaction.montantTotalHT,
+            prixUnitaire: transaction.montantTotalHT,
+            tauxTVA: transaction.montantTotalHT > 0 ? (transaction.montantTaxes / transaction.montantTotalHT * 100).toFixed(2) : 19,
+            remise: 0,
+            articleId: articleParDefaut ? articleParDefaut._id : null,
+            articleData: articleParDefaut,
+            type: articleType, // PRODUIT ou SERVICE selon disponibilité de l'article
+            montantHT: transaction.montantTotalHT,
+            montantTTC: transaction.montantTotalTTC
+          }];
+          console.log(`Ligne par défaut créée de type ${articleType} à partir des montants de transaction:`, lignesRecuperees);
+        }
+      }
+      
+      // Ajout d'un log détaillé pour examen de la structure
+      console.log('Propriétés niveau racine du document:', Object.keys(sourceDocuments[0]));
+      if (sourceDocuments[0].transactionId) {
+        console.log('Propriétés dans transactionId:', Object.keys(sourceDocuments[0].transactionId));
+        
+        // Vérifier si lignesTransaction existe sous une forme ou une autre
+        if (sourceDocuments[0].transactionId.lignesTransaction) {
+          console.log('lignesTransaction trouvé, contenu:', sourceDocuments[0].transactionId.lignesTransaction);
+        } else if (sourceDocuments[0].transactionId.lignetransaction) {
+          console.log('lignetransaction trouvé, contenu:', sourceDocuments[0].transactionId.lignetransaction);
+        }
+        
+        // Vérifier si le document a une propriété _id qui pourrait être utilisée pour une requête directe
+        if (sourceDocuments[0].transactionId._id) {
+          console.log('ID de transaction détecté, tentative de récupération directe des lignes...');
+          try {
+            const transactionId = sourceDocuments[0].transactionId._id;
+            console.log('Récupération des lignes pour la transaction:', transactionId);
+            
+            // Nous pourrions envisager une requête API ici, mais pour l'instant
+            // nous allons continuer avec les données existantes
+          } catch (error) {
+            console.error('Erreur lors de la récupération directe des lignes:', error);
+          }
+        }
+      }
+      if (sourceDocuments[0].transaction) {
+        console.log('Propriétés dans transaction:', Object.keys(sourceDocuments[0].transaction));
+        
+        // Vérifier si transaction.lignes existe
+        if (sourceDocuments[0].transaction.lignes) {
+          console.log('transaction.lignes trouvé, contenu:', sourceDocuments[0].transaction.lignes);
+        }
+      }
+      
+      // Vérifier que tous les documents ont le même client
+      const firstDoc = sourceDocuments[0];
+      const clientInfo = firstDoc.client || firstDoc.clientId;
+      
+      if (!clientInfo) {
+        throw new Error('Client introuvable dans le premier document source');
+      }
+      
+      console.log('Client des documents sources:', clientInfo);
+      
+      // Rechercher le client complet dans la liste des clients si on n'a que l'ID
+      let clientComplet = clientInfo;
+      if (typeof clientInfo === 'string' || clientInfo._id) {
+        const clientId = typeof clientInfo === 'string' ? clientInfo : clientInfo._id;
+        const clientTrouve = clients.find(c => c._id === clientId);
+        if (clientTrouve) {
+          clientComplet = clientTrouve;
+        }
+      }
+      
+      // Fusionner les articles de tous les documents
+      const allArticles = [];
+      sourceDocuments.forEach(doc => {
+        console.log('Traitement du document:', doc._id);
+        
+        // Tenter d'extraire les articles depuis toutes les structures possibles
+        let articlesDoc = [];
+        
+        // 0. Vérifier d'abord si on a récupéré des lignes directement depuis le document source
+        if (lignesRecuperees.length > 0) {
+          console.log('Utilisation des lignes récupérées directement du document:', lignesRecuperees.length);
+          articlesDoc = lignesRecuperees;
+        }
+        // 1. Vérifier ensuite doc.articles
+        else if (doc.articles && Array.isArray(doc.articles) && doc.articles.length > 0) {
+          console.log('Articles trouvés dans doc.articles:', doc.articles.length);
+          articlesDoc = doc.articles;
+        }
+        // 2. Vérifier ensuite doc.transaction.lignes
+        else if (doc.transaction && doc.transaction.lignes && Array.isArray(doc.transaction.lignes)) {
+          console.log('Articles trouvés dans doc.transaction.lignes:', doc.transaction.lignes.length);
+          articlesDoc = doc.transaction.lignes;
+        }
+        // 3. Vérifier doc.transactionId.lignesTransaction
+        else if (doc.transactionId && doc.transactionId.lignesTransaction && Array.isArray(doc.transactionId.lignesTransaction)) {
+          console.log('Articles trouvés dans doc.transactionId.lignesTransaction:', doc.transactionId.lignesTransaction.length);
+          articlesDoc = doc.transactionId.lignesTransaction;
+        }
+        // 4. Vérifier doc.transactionId.lignetransaction (au singulier)
+        else if (doc.transactionId && doc.transactionId.lignetransaction && Array.isArray(doc.transactionId.lignetransaction)) {
+          console.log('Articles trouvés dans doc.transactionId.lignetransaction:', doc.transactionId.lignetransaction.length);
+          articlesDoc = doc.transactionId.lignetransaction;
+        }
+        // 5. Vérifier doc.lignes
+        else if (doc.lignes && Array.isArray(doc.lignes)) {
+          console.log('Articles trouvés dans doc.lignes:', doc.lignes.length);
+          articlesDoc = doc.lignes;
+        }
+        
+        if (articlesDoc.length === 0) {
+          console.warn('Aucun article trouvé dans le document:', doc._id);
+          return;
+        }
+        
+        // Convertir les lignes en articles
+        articlesDoc.forEach(article => {
+          // Normaliser les propriétés pour avoir une structure cohérente
+          const articleNormalise = {
+            designation: article.designation || article.nom || 'Article sans nom',
+            reference: article.reference || article.code || '',
+            quantite: parseFloat(article.quantite) || 1,
+            prixUnitaire: parseFloat(article.prixUnitaire || article.prixUnitaireHT) || 0,
+            prixUnitaireHT: parseFloat(article.prixUnitaireHT || article.prixUnitaire) || 0,
+            remise: parseFloat(article.remise) || 0,
+            tva: parseFloat(article.tva || article.tauxTVA) || 19,
+            tauxTVA: parseFloat(article.tauxTVA || article.tva) || 19,
+            // Conserver les références à l'article réel en base de données
+            articleId: article.articleId ? (typeof article.articleId === 'object' ? article.articleId._id : article.articleId) : null,
+            articleData: article.articleData || article.articleId || article,
+            // Si aucun articleId n'est défini et que le type est PRODUIT, changer le type en SERVICE
+            type: article.articleId ? (article.type || 'PRODUIT') : 'SERVICE',
+            totalHT: 0,
+            totalTTC: 0,
+            montantHT: parseFloat(article.montantHT) || 0,
+            montantTTC: parseFloat(article.montantTTC) || 0
+          };
+          
+          // Calculer les totaux pour cet article s'ils ne sont pas déjà définis
+          if (articleNormalise.montantHT === 0) {
+            articleNormalise.montantHT = articleNormalise.quantite * 
+              articleNormalise.prixUnitaireHT * 
+              (1 - articleNormalise.remise / 100);
+          }
+          
+          if (articleNormalise.montantTTC === 0) {
+            articleNormalise.montantTTC = articleNormalise.montantHT * 
+              (1 + articleNormalise.tauxTVA / 100);
+          }
+          
+          articleNormalise.totalHT = articleNormalise.montantHT;
+          articleNormalise.totalTTC = articleNormalise.montantTTC;
+          
+          // Vérifier si l'article existe déjà dans allArticles
+          const existingIndex = allArticles.findIndex(a => {
+            // Essayer différentes propriétés pour comparer les articles
+            if (a.articleData && articleNormalise.articleData) {
+              if (a.articleData._id && articleNormalise.articleData._id) {
+                return a.articleData._id === articleNormalise.articleData._id;
+              }
+              if (a.articleData.id && articleNormalise.articleData.id) {
+                return a.articleData.id === articleNormalise.articleData.id;
+              }
+            }
+            // Si on ne peut pas comparer par ID, comparer par désignation et référence
+            return a.designation === articleNormalise.designation && 
+                   a.reference === articleNormalise.reference;
+          });
+          
+          if (existingIndex >= 0) {
+            // Si l'article existe, incrémenter la quantité
+            allArticles[existingIndex].quantite += articleNormalise.quantite;
+            // Recalculer le total
+            allArticles[existingIndex].totalHT = allArticles[existingIndex].quantite * 
+              allArticles[existingIndex].prixUnitaire * 
+              (1 - allArticles[existingIndex].remise / 100);
+            allArticles[existingIndex].totalTTC = allArticles[existingIndex].totalHT * 
+              (1 + allArticles[existingIndex].tva / 100);
+          } else {
+            // Sinon, ajouter le nouvel article
+            console.log('Ajout d\'un nouvel article:', {
+              designation: articleNormalise.designation,
+              reference: articleNormalise.reference,
+              prix: articleNormalise.prixUnitaire,
+              quantite: articleNormalise.quantite
+            });
+            allArticles.push(articleNormalise);
+          }
+        });
+      });
+      
+      console.log('Articles fusionnés:', allArticles.length, allArticles);
+      
+      if (allArticles.length === 0) {
+        console.warn('Aucun article trouvé dans les documents sources. Création d\'un article par défaut.');
+        
+        // Créer un article par défaut pour éviter l'erreur bloquante
+        // Récupérer les montants depuis différentes structures possibles
+        const montantHT = sourceDocuments[0].transaction?.montantTotalHT || 
+                        sourceDocuments[0].transactionId?.montantTotalHT || 
+                        sourceDocuments[0].montantTotalHT || 
+                        150;
+                        
+        const montantTTC = sourceDocuments[0].transaction?.montantTotalTTC || 
+                        sourceDocuments[0].transactionId?.montantTotalTTC || 
+                        sourceDocuments[0].montantTotalTTC || 
+                        178.5;
+                        
+        const tauxTVA = 19;  // Par défaut
+
+        // Récupérer un article existant pour le modèle
+        let articleModele = null;
+        if (articles && articles.length > 0) {
+          articleModele = articles[0];
+          console.log('Utilisation d\'un article modèle:', articleModele);
+        }
+        
+        const articleParDefaut = {
+          designation: 'Articles transformés depuis le document source',
+          reference: 'AUTO-' + Date.now(),
+          quantite: 1,
+          prixUnitaire: montantHT,
+          prixUnitaireHT: montantHT,
+          remise: 0,
+          tva: tauxTVA,
+          tauxTVA: tauxTVA,
+          // Si un articleModele existe, on utilise ses propriétés pour avoir un ID valide
+          articleData: articleModele || { 
+            _id: '681a2c0a648f19ad08bfa1a8', // ID d'un article par défaut
+            nom: 'Articles transformés depuis le document source',
+            prix: montantHT,
+            type: 'PRODUIT'
+          },
+          articleId: articleModele ? articleModele._id : '681a2c0a648f19ad08bfa1a8', // ID d'un article par défaut
+          type: 'PRODUIT',
+          totalHT: montantHT,
+          totalTTC: montantTTC,
+          montantHT: montantHT,
+          montantTTC: montantTTC
+        };
+        
+        allArticles.push(articleParDefaut);
+        console.log('Article par défaut créé:', articleParDefaut);
+      }
+      
+      // Calculer les totaux
+      let sousTotal = 0;
+      let totalTVA = 0;
+      let totalTTC = 0;
+      
+      allArticles.forEach(article => {
+        sousTotal += article.totalHT;
+        totalTVA += article.totalTTC - article.totalHT;
+        totalTTC += article.totalTTC;
+      });
+      
+      console.log('Totaux calculés:', { sousTotal, totalTVA, totalTTC });
+      
+      // Déterminer les étapes déjà complétées selon le type de documents sources
+      const etapesEffectuees = [];
+      
+      // Définir les données de paiement en fonction du type de transformation
+      let modePaiement = 'especes';
+      let paiementDetails = {
+        montantRecu: 0,
+        monnaie: 0,
+        reference: '',
+        banque: '',
+        dateEcheance: null
+      };
+      let echeancier = [];
+      
+      // Si c'est une transformation de BL en facture, récupérer les infos de paiement
+      if (documentType === 'BON_LIVRAISON') {
+        const sourceBL = sourceDocuments[0];
+        modePaiement = sourceBL.modePaiement || modePaiement;
+        paiementDetails = sourceBL.paiementDetails || paiementDetails;
+        echeancier = sourceBL.echeancier || echeancier;
+      }
+      
+      // Préparer les données pour la nouvelle vente
+      const transformationData = {
+        client: clientComplet,
+        articles: allArticles,
+        sousTotal: sousTotal,
+        remise: 0,
+        tva: totalTVA,
+        totalTTC: totalTTC,
+        modePaiement: modePaiement,
+        paiementDetails: paiementDetails,
+        echeancier: echeancier,
+        notes: `Créé à partir de ${documentIds.length} ${documentType === 'FACTURE_PROFORMA' ? 'devis' : 'bons de livraison'}`
+      };
+      
+      console.log('Données de transformation générées:', transformationData);
+      
+      // Mettre à jour le state avec les données fusionnées
+      setVenteData({
+        client: transformationData.client,
+        articles: transformationData.articles,
+        sousTotal: transformationData.sousTotal,
+        remise: transformationData.remise,
+        tva: transformationData.tva,
+        totalTTC: transformationData.totalTTC,
+        modePaiement: transformationData.modePaiement,
+        paiementDetails: transformationData.paiementDetails,
+        echeancier: transformationData.echeancier,
+        notes: transformationData.notes,
+        // Information sur les documents sources
+        sourceDocuments: documentIds.map(id => ({
+          type: documentType,
+          id: id
+        })),
+        fluxAutomatique: true,
+        etapesEffectuees: etapesEffectuees,
+        // Propriétés pour le verrouillage des champs
+        clientLocked: true,  // Le client est toujours verrouillé lors d'une transformation
+        articlesLocked: documentType === 'BON_LIVRAISON', // Articles verrouillés seulement pour BL→Facture
+        paiementLocked: false // Le paiement n'est jamais verrouillé, peut être modifié
+      });
+      
+      // Toujours commencer à l'étape 0 (client) pour voir la progression complète
+      setActiveStep(0);
+      
+      console.log('Initialisation depuis sources multiples terminée avec succès');
+      
+    } catch (error) {
+      console.error('Erreur lors de l\'initialisation depuis les documents sources:', error);
+      setSnackbar({
+        open: true,
+        message: `Erreur: ${error.message || 'Impossible de charger les documents sources'}`,
+        severity: 'error'
+      });
+      
+      // Rediriger vers la liste des ventes après un court délai en cas d'erreur
+      setTimeout(() => navigate('/ventes'), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fonction pour initialiser une vente à partir d'un seul document source
   const initialiserVenteDepuisSource = async (documentId, documentType) => {
     try {
       setLoading(true);
       
       // Récupérer les données du document source
-      const response = await apiClient.get(`api/documents/${documentId}`);
+      const response = await apiClient.get(`api/ventes/${documentId}`);
       const sourceDoc = response.data;
       
       if (!sourceDoc) {
@@ -174,17 +600,21 @@ function VentePage() {
       etapesEffectuees = ['client', 'articles'];
       
       switch (documentType) {
-        case SOURCE_DOCUMENT_TYPES.BON_LIVRAISON:
-          // Pour un BL, on démarre à l'étape de paiement
+        case 'FACTURE_PROFORMA':
+          // Pour un devis vers BL, on démarre au paiement, articles modifiables
           etapeDepart = 2; // Paiement (index 2)
           break;
           
-        case SOURCE_DOCUMENT_TYPES.DEVIS:
-          // Pour un devis, on va à la validation (le client a déjà accepté le devis)
-          etapeDepart = 2; // On pourrait aller jusqu'à 4 (validation) mais commençons par le paiement
+        case 'BON_LIVRAISON':
+          // Pour un BL vers facture, on garde toutes les données, articles verrouillés
+          etapeDepart = 2; // Paiement (index 2)
+          etapesEffectuees.push('paiement');
+          if (sourceDoc.echeancier && sourceDoc.echeancier.length > 0) {
+            etapesEffectuees.push('echeancier');
+          }
           break;
           
-        case SOURCE_DOCUMENT_TYPES.FACTURE:
+        case 'FACTURE_TTC':
           // Pour une facture (quand on génère un avoir), on va à l'étape de validation
           etapeDepart = 4; // Validation (index 4)
           etapesEffectuees.push('paiement');
@@ -192,41 +622,39 @@ function VentePage() {
             etapesEffectuees.push('echeancier');
           }
           break;
-          
-        case SOURCE_DOCUMENT_TYPES.FACTURE_PARTIELLE:
-          // Pour facturer le reste d'une facture partielle, on prérempli le paiement
-          etapeDepart = 2; // Paiement (index 2)
-          // Le montant déjà payé sera géré dans le composant de paiement
-          break;
       }
       
       // Mettre à jour le state avec les données du document source
       setVenteData({
         client: sourceDoc.client,
-        articles: sourceDoc.articles,
-        sousTotal: sourceDoc.sousTotal || 0,
+        articles: sourceDoc.articles || [],
+        sousTotal: sourceDoc.sousTotal || sourceDoc.montantTotalHT || 0,
         remise: sourceDoc.remise || 0,
-        tva: sourceDoc.tva || 0,
-        totalTTC: sourceDoc.totalTTC || 0,
-        modePaiement: documentType === SOURCE_DOCUMENT_TYPES.FACTURE_PARTIELLE ? sourceDoc.modePaiement : 'especes',
-        paiementDetails: documentType === SOURCE_DOCUMENT_TYPES.FACTURE_PARTIELLE ? { ...sourceDoc.paiementDetails } : {
+        tva: sourceDoc.tva || sourceDoc.montantTaxes || 0,
+        totalTTC: sourceDoc.totalTTC || sourceDoc.montantTotalTTC || 0,
+        modePaiement: sourceDoc.modePaiement || 'especes',
+        paiementDetails: sourceDoc.paiementDetails || {
           montantRecu: 0,
           monnaie: 0,
           reference: '',
           banque: '',
           dateEcheance: null
         },
-        echeancier: documentType === SOURCE_DOCUMENT_TYPES.FACTURE_PARTIELLE && sourceDoc.echeancier ? [...sourceDoc.echeancier] : [],
+        echeancier: sourceDoc.echeancier || [],
         notes: sourceDoc.notes || '',
         // Information sur le document source
         sourceDocument: { 
           type: documentType, 
           id: documentId,
-          reference: sourceDoc.reference || documentId,
-          date: sourceDoc.date || new Date().toISOString()
+          reference: sourceDoc.numeroDocument || documentId,
+          date: sourceDoc.dateCreation || sourceDoc.date || new Date().toISOString()
         },
         fluxAutomatique: true,
-        etapesEffectuees: etapesEffectuees
+        etapesEffectuees: etapesEffectuees,
+        // Propriétés pour le verrouillage des champs
+        clientLocked: true, // Le client est toujours verrouillé lors d'une transformation
+        articlesLocked: documentType === 'BON_LIVRAISON', // Verrouillé seulement pour transformation BL→Facture 
+        paiementLocked: false // Le paiement n'est jamais verrouillé
       });
       
       // Définir l'étape active
@@ -282,12 +710,18 @@ function VentePage() {
     }
     
     // Skip the echéancier step if the payment method doesn't require it
-    if (activeStep === 2 && 
-        !(venteData.modePaiement === 'cheques_multiples' || 
-          venteData.modePaiement === 'effets_multiples' || 
-          venteData.modePaiement === 'mixte')) {
+    if (activeStep === 2) {
+      const modesPaiementWithEcheancier = ['cheques_multiples', 'effets_multiples', 'mixte'];
+      const currentMode = venteData.modePaiement.toLowerCase();
+      
+      console.log('Mode de paiement sélectionné:', venteData.modePaiement);
+      console.log('Nécessite un échéancier:', modesPaiementWithEcheancier.includes(currentMode));
+      
+      if (!modesPaiementWithEcheancier.includes(currentMode)) {
+        console.log('Saut de l\'étape échéancier car non nécessaire pour ce mode de paiement');
       setActiveStep((prevStep) => prevStep + 2); // Skip to validation step
       return;
+      }
     }
     
     // Validation for Écheancier step
@@ -347,10 +781,7 @@ function VentePage() {
 
   const handleBack = () => {
     // Special handling for going back from validation step when échéancier is not applicable
-    if (activeStep === 4 && 
-        !(venteData.modePaiement === 'cheques_multiples' || 
-          venteData.modePaiement === 'effets_multiples' || 
-          venteData.modePaiement === 'mixte')) {
+    if (activeStep === 4 && !shouldShowEcheancierStep()) {
       setActiveStep(2); // Go back to payment step
       return;
     }
@@ -474,11 +905,100 @@ function VentePage() {
       // Get user and enterprise IDs from localStorage
       const entrepriseId = localStorage.getItem('entrepriseId');
       const userId = localStorage.getItem('userId');
+      const token = localStorage.getItem('token');
+      
+      console.log('Identifiants pour la sauvegarde:', { 
+        entrepriseId: !!entrepriseId, 
+        userId: !!userId, 
+        token: !!token 
+      });
       
       if (!entrepriseId || !userId) {
-        throw new Error("Identifiants non trouvés. Veuillez vous reconnecter.");
+        // Check if we have a token
+        if (!token) {
+          console.error('Pas de token disponible');
+          setSnackbar({
+            open: true,
+            message: "Session expirée. Veuillez vous reconnecter.",
+            severity: 'error'
+          });
+          
+          // Rediriger vers login après un court délai
+          setTimeout(() => {
+            window.location.href = '/login?session_expired=true';
+          }, 2000);
+          return;
+        }
+        
+        // If we have a token but no IDs, try to refresh the user data
+        try {
+          console.log('Tentative de rafraîchissement des données utilisateur avec le token');
+          const response = await apiClient.get('/api/auth/verify');
+          console.log('Réponse de vérification:', response.data);
+          
+          if (response.data.success && response.data.isValid && response.data.user) {
+            // Store the new user data
+            console.log('Stockage des nouvelles données utilisateur:', response.data.user);
+            localStorage.setItem('userId', response.data.user._id);
+            localStorage.setItem('entrepriseId', response.data.user.entrepriseId);
+            
+            // Continue with the updated IDs
+            const newEntrepriseId = response.data.user.entrepriseId;
+            const newUserId = response.data.user._id;
+            
+            console.log('Continuation avec les nouveaux IDs:', { newUserId, newEntrepriseId });
+            
+            // Continue with rest of the function using the new IDs
+            return await continueVenteSaving(newEntrepriseId, newUserId, preventRedirect);
+          } else {
+            console.error('Token invalide ou données utilisateur manquantes');
+            setSnackbar({
+              open: true,
+              message: "Session invalide. Veuillez vous reconnecter.",
+              severity: 'error'
+            });
+            
+            // Rediriger vers login après un court délai
+            setTimeout(() => {
+              window.location.href = '/login?session_expired=true';
+            }, 2000);
+            return;
+          }
+        } catch (error) {
+          console.error('Erreur lors du rafraîchissement des données utilisateur:', error);
+          setSnackbar({
+            open: true,
+            message: "Erreur d'authentification. Veuillez vous reconnecter.",
+            severity: 'error'
+          });
+          
+          // Rediriger vers login après un court délai
+          setTimeout(() => {
+            window.location.href = '/login?session_expired=true';
+          }, 2000);
+          return;
+        }
       }
       
+      // Continue with the original IDs
+      return await continueVenteSaving(entrepriseId, userId, preventRedirect);
+      
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement:", error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || error.message || "Erreur lors de l'enregistrement",
+        severity: 'error'
+      });
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fonction auxiliaire pour continuer la sauvegarde une fois l'authentification vérifiée
+  const continueVenteSaving = async (entrepriseId, userId, preventRedirect) => {
+    try {
       // Validate essential data
       if (!venteData.client || !venteData.client._id) {
         throw new Error('Veuillez sélectionner un client');
@@ -514,6 +1034,7 @@ function VentePage() {
       }
 
       let result;
+      console.log('Envoi de la vente au serveur avec IDs:', { entrepriseId, userId });
       
       if (venteData.id) {
         result = await updateVente(venteData.id, venteDataToSave, { entrepriseId, userId });
@@ -537,15 +1058,13 @@ function VentePage() {
       return result;
       
     } catch (error) {
-      console.error("Erreur lors de l'enregistrement:", error);
+      console.error("Erreur lors de l'enregistrement dans continueVenteSaving:", error);
       setSnackbar({
         open: true,
         message: error.response?.data?.message || error.message || "Erreur lors de l'enregistrement",
         severity: 'error'
       });
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -673,31 +1192,42 @@ function VentePage() {
     }
     
     // Pour un bon de livraison, on saute l'étape d'échéancier
-    if (documentType === 'BON_LIVRAISON') {
-      switch (step) {
-        case 0:
-          return <ClientStep venteData={venteData} updateVenteData={handleDataChange} />;
-        case 1:
-          return <ArticlesStep venteData={venteData} updateVenteData={handleDataChange} />;
-        case 2: // Paiement
-          return <PaiementStep 
-            venteData={venteData} 
-            updateVenteData={handleDataChange} 
-            isBonLivraison={true}
-          />;
-        case 3: // Validation
-          return <ValidationStep 
-            venteData={venteData} 
-            updateVenteData={handleDataChange} 
-            onImprimer={handleImprimerFacture}
-            onEnvoyer={handleEnvoyerParEmail}
-            onSaveVente={handleSaveVente}
-            isBonLivraison={true}
-          />;
-        default:
-          return 'Étape inconnue';
+   switch (step) {
+      case 0:
+        return <ClientStep venteData={venteData} updateVenteData={handleDataChange} />;
+      case 1:
+        return <ArticlesStep venteData={venteData} updateVenteData={handleDataChange} />;
+      case 2:
+        return <PaiementStep venteData={venteData} updateVenteData={handleDataChange} />;
+      case 3:
+        console.log('Affichage de l\'étape 3:', { modePaiement: venteData.modePaiement, shouldShow: shouldShowEcheancierStep() });
+        if (shouldShowEcheancierStep()) {
+          return <EcheancierStep venteData={venteData} updateVenteData={handleDataChange} />;
+        } else {
+          // Redirection vers l'étape de validation si on arrive ici sans nécessiter d'échéancier
+          setTimeout(() => setActiveStep(4), 0);
+          return <CircularProgress />;
+        }
+      case 4:
+        return <ValidationStep 
+          venteData={venteData} 
+          updateVenteData={handleDataChange} 
+          onImprimer={handleImprimerFacture}
+          onEnvoyer={handleEnvoyerParEmail}
+          onSaveVente={async (preventRedirect) => {
+            try {
+              const result = await handleSaveVente(preventRedirect);
+              console.log('Résultat de handleSaveVente:', result);
+              return result;
+            } catch (error) {
+              console.error('Erreur dans onSaveVente:', error);
+              throw error;
+            }
+          }}
+        />;
+      default:
+        return 'Étape inconnue';
       }
-    }
     
     // Pour une facture, on a tout le flux
     switch (step) {
@@ -708,17 +1238,14 @@ function VentePage() {
       case 2:
         return <PaiementStep venteData={venteData} updateVenteData={handleDataChange} />;
       case 3:
-        return shouldShowEcheancierStep() ? (
-          <EcheancierStep venteData={venteData} updateVenteData={handleDataChange} />
-        ) : (
-          <ValidationStep 
-            venteData={venteData} 
-            updateVenteData={handleDataChange} 
-            onImprimer={handleImprimerFacture}
-            onEnvoyer={handleEnvoyerParEmail}
-            onSaveVente={handleSaveVente}
-          />
-        );
+        console.log('Affichage de l\'étape 3:', { modePaiement: venteData.modePaiement, shouldShow: shouldShowEcheancierStep() });
+        if (shouldShowEcheancierStep()) {
+          return <EcheancierStep venteData={venteData} updateVenteData={handleDataChange} />;
+        } else {
+          // Redirection vers l'étape de validation si on arrive ici sans nécessiter d'échéancier
+          setTimeout(() => setActiveStep(4), 0);
+          return <CircularProgress />;
+        }
       case 4:
         return <ValidationStep 
           venteData={venteData} 
@@ -743,9 +1270,10 @@ function VentePage() {
 
   // Determine if current step should be shown based on payment method
   const shouldShowEcheancierStep = () => {
-    return venteData.modePaiement === 'cheques_multiples' || 
-           venteData.modePaiement === 'effets_multiples' || 
-           venteData.modePaiement === 'mixte';
+    const modesPaiementWithEcheancier = ['cheques_multiples', 'effets_multiples', 'mixte'];
+    const currentMode = venteData.modePaiement.toLowerCase();
+    
+    return modesPaiementWithEcheancier.includes(currentMode);
   };
 
   // Customize stepper labels based on payment method

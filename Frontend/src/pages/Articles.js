@@ -1,13 +1,13 @@
-// client/src/pages/Articles.js - Page de gestion des articles
+// client/src/pages/Articles.js - Page de gestion des articles (VERSION CORRIGÉE)
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Button, Typography, Snackbar, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, IconButton, Tooltip, CircularProgress, Alert, InputAdornment,
   Chip, Paper, Grid, FormControl, InputLabel, Select, MenuItem, 
-  FormControlLabel, Switch, Stack
+  FormControlLabel, Switch, Stack, List, ListItem, ListItemText
 } from '@mui/material';
 import { 
-  Add, Edit, Delete, Search, FilterList, ImportExport, CheckCircle, Cancel, Category, Inventory2
+  Add, Edit, Delete, Search, FilterList, ImportExport, CheckCircle, Cancel, Category, Inventory2, Close
 } from '@mui/icons-material';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { useDebouncedCallback } from 'use-debounce';
@@ -33,31 +33,128 @@ export default function ArticlesPage() {
     designation: '',
     type: 'PRODUIT',
     prixVenteHT: 0,
-    prixAchatHT: 0, // Ajout du prix d'achat
+    prixAchatHT: 0,
+    prixAchatMoyen: 0,
+    dernierPrixAchat: 0,
+    codeBarre: '',
+    categorie: '',
     tauxTaxe: 19,
-    actif: true
+    actif: true,
+    stock: 0
   });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [searchText, setSearchText] = useState('');
   const [filter, setFilter] = useState('TOUS');
+  const [categorieFilter, setCategorieFilter] = useState('TOUTES');
   const [sortBy, setSortBy] = useState('designation');
   const [formErrors, setFormErrors] = useState({});
+  const [categories, setCategories] = useState([]);
 
-  // Fonction pour charger tous les articles
+  // État pour la vue détaillée
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+
+  // Fonction pour charger les catégories
+  const loadCategories = async () => {
+    try {
+      const response = await apiClient.get('/api/parametres/categories-articles');
+      console.log('Catégories chargées:', response.data);
+      setCategories(response.data || []);
+    } catch (error) {
+      console.error('Erreur lors du chargement des catégories:', error);
+      setCategories([]); // Initialiser avec un tableau vide
+      setSnackbar({
+        open: true,
+        message: 'Erreur lors du chargement des catégories',
+        severity: 'warning'
+      });
+    }
+  };
+
+  // Fonction pour charger tous les articles - VERSION CORRIGÉE
   const fetchArticles = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get('/api/articles');
-      setArticles(res.data);
+      console.log('Début du chargement des articles...');
+      
+      // Utiliser les paramètres corrects selon votre API
+      const res = await apiClient.get('/api/articles', {
+        params: {
+          actif: true // ou ne pas mettre ce paramètre si vous voulez tous les articles
+        }
+      });
+      
+      console.log('Réponse complète de l\'API:', res);
+      console.log('Données reçues:', res.data);
+      
+      let articlesData = [];
+      
+      // Gérer différents formats de réponse
+      if (res.data) {
+        if (res.data.success && Array.isArray(res.data.data)) {
+          // Format: { success: true, data: [...] }
+          articlesData = res.data.data;
+          console.log('Format avec success:', articlesData);
+        } else if (Array.isArray(res.data)) {
+          // Format: [...]
+          articlesData = res.data;
+          console.log('Format tableau direct:', articlesData);
+        } else if (res.data.articles && Array.isArray(res.data.articles)) {
+          // Format: { articles: [...] }
+          articlesData = res.data.articles;
+          console.log('Format avec propriété articles:', articlesData);
+        } else {
+          console.error('Structure de réponse non reconnue:', res.data);
+          articlesData = [];
+        }
+      }
+      
+      console.log(`${articlesData.length} articles chargés:`, articlesData);
+      setArticles(articlesData);
+      
+      if (articlesData.length === 0) {
+        setSnackbar({ 
+          open: true, 
+          message: "Aucun article trouvé", 
+          severity: "info" 
+        });
+      }
+      
     } catch (error) {
-      console.error(error);
-      setSnackbar({ open: true, message: "Erreur de chargement des articles", severity: "error" });
+      console.error('Erreur lors du chargement des articles:', error);
+      console.error('Détails de l\'erreur:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
+      setArticles([]);
+      
+      // Message d'erreur plus informatif
+      let errorMessage = "Erreur de chargement des articles";
+      if (error.response?.status === 401) {
+        errorMessage = "Non autorisé - Veuillez vous reconnecter";
+      } else if (error.response?.status === 403) {
+        errorMessage = "Accès interdit";
+      } else if (error.response?.status === 404) {
+        errorMessage = "Endpoint non trouvé - Vérifiez l'URL de l'API";
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      setSnackbar({ 
+        open: true, 
+        message: errorMessage, 
+        severity: "error" 
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  // Charger les données au montage du composant
   useEffect(() => {
+    console.log('Montage du composant - Chargement des données...');
+    loadCategories();
     fetchArticles();
   }, []);
 
@@ -70,9 +167,14 @@ export default function ArticlesPage() {
         designation: article.designation || '',
         type: article.type || 'PRODUIT',
         prixVenteHT: article.prixVenteHT || 0,
-        prixAchatHT: article.prixAchatHT || 0, // Ajout du prix d'achat
+        prixAchatHT: article.prixAchatHT || 0,
+        prixAchatMoyen: article.prixAchatMoyen || 0,
+        dernierPrixAchat: article.dernierPrixAchat || 0,
+        codeBarre: article.codeBarre || '',
+        categorie: article.categorie || '',
         tauxTaxe: article.tauxTaxe || 19,
-        actif: article.actif !== undefined ? article.actif : true
+        actif: article.actif !== undefined ? article.actif : true,
+        stock: article.stock || 0
       });
     } else {
       setFormData({
@@ -80,9 +182,14 @@ export default function ArticlesPage() {
         designation: '',
         type: 'PRODUIT',
         prixVenteHT: 0,
-        prixAchatHT: 0, // Ajout du prix d'achat
+        prixAchatHT: 0,
+        prixAchatMoyen: 0,
+        dernierPrixAchat: 0,
+        codeBarre: '',
+        categorie: '',
         tauxTaxe: 19,
-        actif: true
+        actif: true,
+        stock: 0
       });
     }
     setFormErrors({});
@@ -98,7 +205,7 @@ export default function ArticlesPage() {
   const handleChange = (e) => {
     const { name, value, checked } = e.target;
     const val = name === 'actif' ? checked : 
-              ['prixVenteHT', 'prixAchatHT', 'tauxTaxe'].includes(name) ? Number(value) : value; // Ajout du prix d'achat
+              ['prixVenteHT', 'prixAchatHT', 'tauxTaxe', 'stock'].includes(name) ? Number(value) : value;
     setFormData(prev => ({ ...prev, [name]: val }));
     
     // Effacer l'erreur lorsque l'utilisateur modifie le champ
@@ -126,17 +233,22 @@ export default function ArticlesPage() {
     
     if (!formData.code.trim()) errors.code = "Le code est obligatoire";
     if (!formData.designation.trim()) errors.designation = "La désignation est obligatoire";
+    if (!formData.categorie.trim()) errors.categorie = "La catégorie est obligatoire";
     
     if (formData.prixVenteHT < 0) {
       errors.prixVenteHT = "Le prix de vente ne peut pas être négatif";
     }
     
-    if (formData.prixAchatHT < 0) { // Validation du prix d'achat
+    if (formData.prixAchatHT < 0) {
       errors.prixAchatHT = "Le prix d'achat ne peut pas être négatif";
     }
     
     if (formData.tauxTaxe < 0 || formData.tauxTaxe > 100) {
       errors.tauxTaxe = "Le taux doit être entre 0 et 100%";
+    }
+
+    if (formData.stock < 0) {
+      errors.stock = "Le stock ne peut pas être négatif";
     }
     
     setFormErrors(errors);
@@ -148,6 +260,8 @@ export default function ArticlesPage() {
     if (!validateForm()) return;
     
     try {
+      setLoading(true);
+      
       if (selectedArticle) {
         await apiClient.put(`/api/articles/${selectedArticle._id}`, formData);
         setSnackbar({ open: true, message: "Article modifié avec succès", severity: "success" });
@@ -156,7 +270,7 @@ export default function ArticlesPage() {
         setSnackbar({ open: true, message: "Article ajouté avec succès", severity: "success" });
       }
       handleCloseDialog();
-      fetchArticles();
+      await fetchArticles(); // Recharger la liste
     } catch (error) {
       console.error("Erreur API:", error.response?.data || error.message);
       
@@ -169,6 +283,8 @@ export default function ArticlesPage() {
           severity: "error"
         });
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -178,7 +294,7 @@ export default function ArticlesPage() {
       try {
         await apiClient.delete(`/api/articles/${id}`);
         setSnackbar({ open: true, message: "Article désactivé avec succès", severity: "success" });
-        fetchArticles();
+        await fetchArticles(); // Recharger la liste
       } catch (error) {
         console.error(error);
         setSnackbar({ open: true, message: "Erreur lors de la désactivation", severity: "error" });
@@ -186,57 +302,95 @@ export default function ArticlesPage() {
     }
   };
 
-  // Filtrage des articles
-  const filteredArticles = articles.filter(article => {
-    const matchesSearch = article.designation.toLowerCase().includes(searchText.toLowerCase()) || 
-                          article.code.toLowerCase().includes(searchText.toLowerCase());
-    
-    if (filter === 'TOUS') return matchesSearch;
-    return article.type === filter && matchesSearch;
-  });
+  // Filtrage des articles - PROTECTION RENFORCÉE
+  const filteredArticles = React.useMemo(() => {
+    if (!Array.isArray(articles)) {
+      console.warn('Articles n\'est pas un tableau:', articles);
+      return [];
+    }
+
+    return articles.filter(article => {
+      if (!article) return false;
+
+      const matchesSearch = searchText === '' || 
+        (article.designation && article.designation.toLowerCase().includes(searchText.toLowerCase())) || 
+        (article.code && article.code.toLowerCase().includes(searchText.toLowerCase())) ||
+        (article.codeBarre && article.codeBarre.toLowerCase().includes(searchText.toLowerCase()));
+      
+      const matchesType = filter === 'TOUS' || article.type === filter;
+      const matchesCategorie = categorieFilter === 'TOUTES' || article.categorie === categorieFilter;
+      
+      return matchesSearch && matchesType && matchesCategorie;
+    });
+  }, [articles, searchText, filter, categorieFilter]);
 
   // Tri des articles
-  const sortedArticles = [...filteredArticles].sort((a, b) => {
-    switch(sortBy) {
-      case 'code': return a.code.localeCompare(b.code);
-      case 'designation': return a.designation.localeCompare(b.designation);
-      case 'prixVenteHT': return a.prixVenteHT - b.prixVenteHT;
-      case 'prixAchatHT': return (a.prixAchatHT || 0) - (b.prixAchatHT || 0); // Tri par prix d'achat
-      default: return a.designation.localeCompare(b.designation);
-    }
-  });
+  const sortedArticles = React.useMemo(() => {
+    return [...filteredArticles].sort((a, b) => {
+      if (!a || !b) return 0;
+      
+      switch(sortBy) {
+        case 'code': 
+          return (a.code || '').localeCompare(b.code || '');
+        case 'designation': 
+          return (a.designation || '').localeCompare(b.designation || '');
+        case 'categorie': 
+          return (a.categorie || '').localeCompare(b.categorie || '');
+        case 'prixVenteHT': 
+          return (a.prixVenteHT || 0) - (b.prixVenteHT || 0);
+        case 'prixAchatHT': 
+          return (a.prixAchatHT || 0) - (b.prixAchatHT || 0);
+        default: 
+          return (a.designation || '').localeCompare(b.designation || '');
+      }
+    });
+  }, [filteredArticles, sortBy]);
 
+  // Configuration des colonnes du DataGrid
   const columns = [
     { 
       field: 'code', 
       headerName: 'Code', 
-      width: 150 
+      width: 100,
+      renderCell: (params) => (
+        <Typography variant="body2" fontWeight="medium">
+          {params.value}
+        </Typography>
+      )
     },
     { 
       field: 'designation', 
       headerName: 'Désignation', 
-      flex: 1 
+      flex: 1,
+      minWidth: 200,
+      renderCell: (params) => (
+        <Typography variant="body2">
+          {params.value}
+        </Typography>
+      )
     },
     { 
       field: 'type', 
       headerName: 'Type', 
-      width: 150,
+      width: 120,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {getArticleTypeIcon(params.value)}
-          <span>{params.value}</span>
+          <Typography variant="body2">{params.value}</Typography>
         </Box>
       )
     },
     { 
-      field: 'prixAchatHT', 
-      headerName: 'Prix Achat HT', 
-      width: 120,
-      type: 'number',
+      field: 'categorie', 
+      headerName: 'Catégorie', 
+      width: 150,
       renderCell: (params) => (
-        <Typography>
-          {params.value ? params.value.toFixed(2) : "0.00"} TND
-        </Typography>
+        <Chip 
+          label={params.value} 
+          size="small" 
+          variant="outlined"
+          sx={{ minWidth: 100 }}
+        />
       )
     },
     { 
@@ -245,8 +399,8 @@ export default function ArticlesPage() {
       width: 120,
       type: 'number',
       renderCell: (params) => (
-        <Typography>
-          {params.value.toFixed(2)} TND
+        <Typography variant="body2" fontWeight="medium">
+          {(params.value || 0).toFixed(2)} TND
         </Typography>
       )
     },
@@ -256,42 +410,35 @@ export default function ArticlesPage() {
       width: 120,
       type: 'number',
       valueGetter: (params) => {
-        return params.row.prixVenteHT * (1 + params.row.tauxTaxe / 100);
+        const prixHT = params.row.prixVenteHT || 0;
+        const taux = params.row.tauxTaxe || 0;
+        return prixHT * (1 + taux / 100);
       },
       renderCell: (params) => (
-        <Typography fontWeight={500}>
-          {params.value.toFixed(2)} TND
+        <Typography variant="body2" fontWeight="medium">
+          {(params.value || 0).toFixed(2)} TND
         </Typography>
       )
     },
     { 
-      field: 'marge', 
-      headerName: 'Marge %', 
+      field: 'stock', 
+      headerName: 'Stock', 
       width: 100,
-      valueGetter: (params) => {
-        if (!params.row.prixAchatHT) return 0;
-        return ((params.row.prixVenteHT - params.row.prixAchatHT) / params.row.prixAchatHT) * 100;
-      },
+      type: 'number',
       renderCell: (params) => (
-        <Typography color={params.value > 0 ? "success.main" : "error.main"}>
-          {params.value.toFixed(1)}%
-        </Typography>
-      )
-    },
-    { 
-      field: 'tauxTaxe', 
-      headerName: 'TVA', 
-      width: 80,
-      renderCell: (params) => (
-        <Typography>
-          {params.value}%
+        <Typography 
+          variant="body2" 
+          color={(params.value || 0) > 0 ? "success.main" : "error.main"}
+          fontWeight="medium"
+        >
+          {params.value || 0}
         </Typography>
       )
     },
     {
       field: 'actif',
       headerName: 'Statut',
-      width: 120,
+      width: 100,
       renderCell: (params) => (
         <Chip 
           icon={params.value ? <CheckCircle fontSize="small" /> : <Cancel fontSize="small" />}
@@ -301,34 +448,27 @@ export default function ArticlesPage() {
         />
       )
     },
-	
-	{ 
-    field: 'stock', 
-    headerName: 'Stock', 
-    width: 120,
-    type: 'number',
-    renderCell: (params) => (
-      <Typography color={params.value > 0 ? "inherit" : "error"}>
-        {params.value}
-      </Typography>
-    )
-  },
-	
     {
       field: 'actions', 
       headerName: 'Actions', 
-      width: 150, 
+      width: 120, 
       renderCell: (params) => (
         <Box>
           <Tooltip title="Modifier">
-            <IconButton color="primary" onClick={() => handleOpenDialog(params.row)}>
+            <IconButton color="primary" onClick={(e) => {
+              e.stopPropagation();
+              handleOpenDialog(params.row);
+            }}>
               <Edit />
             </IconButton>
           </Tooltip>
           <Tooltip title={params.row.actif ? "Désactiver" : "Réactiver"}>
             <IconButton 
               color={params.row.actif ? "error" : "success"} 
-              onClick={() => handleDelete(params.row._id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete(params.row._id);
+              }}
             >
               {params.row.actif ? <Delete /> : <CheckCircle />}
             </IconButton>
@@ -337,6 +477,20 @@ export default function ArticlesPage() {
       )
     }
   ];
+
+  // Gestionnaire pour ouvrir la vue détaillée
+  const handleRowClick = (params) => {
+    setSelectedArticle(params.row);
+    setDetailDialogOpen(true);
+  };
+
+  // Gestionnaire pour fermer la vue détaillée
+  const handleCloseDetailDialog = () => {
+    setDetailDialogOpen(false);
+    setSelectedArticle(null);
+  };
+
+  console.log('Rendu - Articles:', articles.length, 'Filtrés:', filteredArticles.length, 'Triés:', sortedArticles.length);
 
   return (
     <Box>
@@ -348,10 +502,50 @@ export default function ArticlesPage() {
         </Button>
       </Box>
 
+      {/* Statistiques rapides */}
+      {!loading && (
+        <Paper sx={{ p: 2, mb: 2 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <Typography variant="h6" color="primary">
+                {articles.length}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Total articles
+              </Typography>
+            </Grid>
+            <Grid item xs={3}>
+              <Typography variant="h6" color="success.main">
+                {articles.filter(a => a.actif).length}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Articles actifs
+              </Typography>
+            </Grid>
+            <Grid item xs={3}>
+              <Typography variant="h6" color="warning.main">
+                {articles.filter(a => a.stock <= 5).length}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Stock faible
+              </Typography>
+            </Grid>
+            <Grid item xs={3}>
+              <Typography variant="h6" color="error.main">
+                {articles.filter(a => a.stock === 0).length}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Rupture stock
+              </Typography>
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
+
       {/* Barre de filtres et recherche */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={5}>
+          <Grid item xs={12} md={4}>
             <TextField
               fullWidth
               placeholder="Rechercher un article..."
@@ -366,7 +560,7 @@ export default function ArticlesPage() {
               }}
             />
           </Grid>
-          <Grid item xs={6} md={3}>
+          <Grid item xs={6} md={2}>
             <FormControl fullWidth>
               <InputLabel>Type d'article</InputLabel>
               <Select
@@ -382,6 +576,23 @@ export default function ArticlesPage() {
           </Grid>
           <Grid item xs={6} md={2}>
             <FormControl fullWidth>
+              <InputLabel>Catégorie</InputLabel>
+              <Select
+                value={categorieFilter}
+                onChange={(e) => setCategorieFilter(e.target.value)}
+                label="Catégorie"
+              >
+                <MenuItem value="TOUTES">Toutes les catégories</MenuItem>
+                {categories.map((cat) => (
+                  <MenuItem key={cat._id || cat.nom} value={cat.nom}>
+                    {cat.nom}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={6} md={2}>
+            <FormControl fullWidth>
               <InputLabel>Trier par</InputLabel>
               <Select
                 value={sortBy}
@@ -390,19 +601,21 @@ export default function ArticlesPage() {
               >
                 <MenuItem value="code">Code</MenuItem>
                 <MenuItem value="designation">Désignation</MenuItem>
+                <MenuItem value="categorie">Catégorie</MenuItem>
                 <MenuItem value="prixVenteHT">Prix vente</MenuItem>
                 <MenuItem value="prixAchatHT">Prix achat</MenuItem>
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid item xs={6} md={2}>
             <Button
               fullWidth
               variant="outlined"
               startIcon={<ImportExport />}
-              onClick={() => alert("Fonctionnalité d'import/export à implémenter")}
+              onClick={() => fetchArticles()}
+              disabled={loading}
             >
-              Importer
+              Actualiser
             </Button>
           </Grid>
         </Grid>
@@ -410,7 +623,32 @@ export default function ArticlesPage() {
 
       {/* Tableau des articles */}
       {loading ? (
-        <Box sx={{ textAlign: 'center', mt: 5 }}><CircularProgress /></Box>
+        <Box sx={{ textAlign: 'center', mt: 5, mb: 5 }}>
+          <CircularProgress size={60} />
+          <Typography sx={{ mt: 2 }}>Chargement des articles...</Typography>
+        </Box>
+      ) : sortedArticles.length === 0 ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h6" color="textSecondary">
+            Aucun article trouvé
+          </Typography>
+          <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+            {articles.length === 0 
+              ? "Commencez par ajouter votre premier article"
+              : "Aucun article ne correspond aux critères de recherche"
+            }
+          </Typography>
+          {articles.length === 0 && (
+            <Button 
+              variant="contained" 
+              startIcon={<Add />} 
+              onClick={() => handleOpenDialog()}
+              sx={{ mt: 2 }}
+            >
+              Ajouter le premier article
+            </Button>
+          )}
+        </Paper>
       ) : (
         <DataGrid
           rows={sortedArticles}
@@ -418,8 +656,9 @@ export default function ArticlesPage() {
           getRowId={(row) => row._id}
           autoHeight
           pageSize={10}
-          rowsPerPageOptions={[5, 10, 25]}
+          rowsPerPageOptions={[5, 10, 25, 50]}
           disableSelectionOnClick
+          onRowClick={handleRowClick}
           components={{
             Toolbar: GridToolbar,
           }}
@@ -432,6 +671,7 @@ export default function ArticlesPage() {
           sx={{ 
             '& .MuiDataGrid-row:hover': {
               backgroundColor: 'rgba(64, 224, 208, 0.08)',
+              cursor: 'pointer'
             }
           }}
         />
@@ -462,6 +702,17 @@ export default function ArticlesPage() {
               />
             </Grid>
             <Grid item xs={12} md={6}>
+              <TextField 
+                label="Code à barre" 
+                name="codeBarre" 
+                value={formData.codeBarre} 
+                onChange={handleChange} 
+                fullWidth
+                error={!!formErrors.codeBarre}
+                helperText={formErrors.codeBarre}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
               <FormControl fullWidth>
                 <InputLabel>Type d'article *</InputLabel>
                 <Select
@@ -472,6 +723,23 @@ export default function ArticlesPage() {
                 >
                   <MenuItem value="PRODUIT">Produit</MenuItem>
                   <MenuItem value="SERVICE">Service</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>Catégorie *</InputLabel>
+                <Select
+                  name="categorie"
+                  value={formData.categorie}
+                  onChange={handleChange}
+                  label="Catégorie *"
+                >
+                  {categories.map((cat) => (
+                    <MenuItem key={cat._id} value={cat.nom}>
+                      {cat.nom}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </Grid>
@@ -505,6 +773,32 @@ export default function ArticlesPage() {
             </Grid>
             <Grid item xs={12} md={3}>
               <TextField 
+                label="Prix d'achat moyen HT" 
+                name="prixAchatMoyen" 
+                type="number"
+                value={formData.prixAchatMoyen} 
+                disabled
+                fullWidth
+                InputProps={{
+                  endAdornment: <InputAdornment position="end">TND</InputAdornment>,
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField 
+                label="Dernier prix d'achat HT" 
+                name="dernierPrixAchat" 
+                type="number"
+                value={formData.dernierPrixAchat} 
+                disabled
+                fullWidth
+                InputProps={{
+                  endAdornment: <InputAdornment position="end">TND</InputAdornment>,
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField 
                 label="Prix de vente HT *" 
                 name="prixVenteHT" 
                 type="number"
@@ -518,6 +812,9 @@ export default function ArticlesPage() {
                 helperText={formErrors.prixVenteHT}
               />
             </Grid>
+          </Grid>
+
+          <Grid container spacing={2}>
             <Grid item xs={12} md={3}>
               <TextField 
                 label="Taux de TVA (%)" 
@@ -545,21 +842,21 @@ export default function ArticlesPage() {
                 disabled
               />
             </Grid>
-			<Grid item xs={12} md={3}>
-  <TextField
-    label="Stock *"
-    name="stock"
-    type="number"
-    value={formData.stock}
-    onChange={handleChange}
-    fullWidth
-    InputProps={{
-      inputProps: { min: 0 }
-    }}
-    error={!!formErrors.stock}
-    helperText={formErrors.stock}
-  />
-</Grid>
+            <Grid item xs={12} md={3}>
+              <TextField
+                label="Stock *"
+                name="stock"
+                type="number"
+                value={formData.stock}
+                onChange={handleChange}
+                fullWidth
+                InputProps={{
+                  inputProps: { min: 0 }
+                }}
+                error={!!formErrors.stock}
+                helperText={formErrors.stock}
+              />
+            </Grid>
           </Grid>
           
           {/* Affichage de la marge calculée */}
@@ -598,13 +895,242 @@ export default function ArticlesPage() {
         </DialogActions>
       </Dialog>
 
+      {/* Boîte de dialogue de détails */}
+      <Dialog
+        open={detailDialogOpen}
+        onClose={handleCloseDetailDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        {selectedArticle && (
+          <>
+            <DialogTitle>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h6">Détails de l'article</Typography>
+                <Box>
+                  <Tooltip title="Modifier">
+                    <IconButton onClick={() => {
+                      handleCloseDetailDialog();
+                      handleOpenDialog(selectedArticle);
+                    }}>
+                      <Edit />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Fermer">
+                    <IconButton onClick={handleCloseDetailDialog}>
+                      <Close />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Box>
+            </DialogTitle>
+            <DialogContent>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Informations générales
+                    </Typography>
+                    <List dense>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Code" 
+                          secondary={selectedArticle.code}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Désignation" 
+                          secondary={selectedArticle.designation}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Type" 
+                          secondary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {getArticleTypeIcon(selectedArticle.type)}
+                              {selectedArticle.type}
+                            </Box>
+                          }
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Catégorie" 
+                          secondary={selectedArticle.categorie}
+                        />
+                      </ListItem>
+                    </List>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Informations financières
+                    </Typography>
+                    <List dense>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Prix d'achat HT" 
+                          secondary={`${selectedArticle.prixAchatHT.toFixed(2)} TND`}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Prix d'achat moyen HT" 
+                          secondary={`${selectedArticle.prixAchatMoyen.toFixed(2)} TND`}
+                        />
+						</ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Dernier prix d'achat HT" 
+                          secondary={`${selectedArticle.dernierPrixAchat.toFixed(2)} TND`}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Prix de vente HT" 
+                          secondary={`${selectedArticle.prixVenteHT.toFixed(2)} TND`}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Prix de vente TTC" 
+                          secondary={`${(selectedArticle.prixVenteHT * (1 + selectedArticle.tauxTaxe / 100)).toFixed(2)} TND`}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Taux TVA" 
+                          secondary={`${selectedArticle.tauxTaxe}%`}
+                        />
+                      </ListItem>
+                      {selectedArticle.prixAchatHT > 0 && (
+                        <ListItem>
+                          <ListItemText 
+                            primary="Marge" 
+                            secondary={
+                              <Chip 
+                                label={`${(((selectedArticle.prixVenteHT - selectedArticle.prixAchatHT) / selectedArticle.prixAchatHT) * 100).toFixed(1)}%`}
+                                color={(((selectedArticle.prixVenteHT - selectedArticle.prixAchatHT) / selectedArticle.prixAchatHT) * 100) > 0 ? "success" : "error"}
+                                size="small"
+                              />
+                            }
+                          />
+                        </ListItem>
+                      )}
+                    </List>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Stock et statut
+                    </Typography>
+                    <List dense>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Stock actuel" 
+                          secondary={
+                            <Typography 
+                              color={selectedArticle.stock > 0 ? "success.main" : "error.main"}
+                              fontWeight="medium"
+                            >
+                              {selectedArticle.stock} unités
+                            </Typography>
+                          }
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Statut" 
+                          secondary={
+                            <Chip 
+                              icon={selectedArticle.actif ? <CheckCircle fontSize="small" /> : <Cancel fontSize="small" />}
+                              label={selectedArticle.actif ? "Actif" : "Inactif"}
+                              color={selectedArticle.actif ? "success" : "default"}
+                              size="small"
+                            />
+                          }
+                        />
+                      </ListItem>
+                      {selectedArticle.codeBarre && (
+                        <ListItem>
+                          <ListItemText 
+                            primary="Code à barres" 
+                            secondary={selectedArticle.codeBarre}
+                          />
+                        </ListItem>
+                      )}
+                    </List>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Informations calculées
+                    </Typography>
+                    <List dense>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Valeur stock (prix achat)" 
+                          secondary={`${(selectedArticle.stock * selectedArticle.prixAchatHT).toFixed(2)} TND`}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Valeur stock (prix vente)" 
+                          secondary={`${(selectedArticle.stock * selectedArticle.prixVenteHT).toFixed(2)} TND`}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Bénéfice potentiel" 
+                          secondary={
+                            <Typography 
+                              color={selectedArticle.stock * (selectedArticle.prixVenteHT - selectedArticle.prixAchatHT) > 0 ? "success.main" : "error.main"}
+                              fontWeight="medium"
+                            >
+                              {(selectedArticle.stock * (selectedArticle.prixVenteHT - selectedArticle.prixAchatHT)).toFixed(2)} TND
+                            </Typography>
+                          }
+                        />
+                      </ListItem>
+                    </List>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCloseDetailDialog}>Fermer</Button>
+              <Button 
+                variant="contained" 
+                startIcon={<Edit />}
+                onClick={() => {
+                  handleCloseDetailDialog();
+                  handleOpenDialog(selectedArticle);
+                }}
+              >
+                Modifier
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
+
       {/* Snackbar pour les notifications */}
       <Snackbar
         open={snackbar.open}
+        autoHideDuration={6000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
-        autoHideDuration={4000}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%' }}>
+        <Alert 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
           {snackbar.message}
         </Alert>
       </Snackbar>

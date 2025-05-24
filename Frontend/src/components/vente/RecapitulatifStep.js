@@ -24,7 +24,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  IconButton
+  IconButton,
+  Stack,
+  Link
 } from '@mui/material';
 import {
   Person,
@@ -41,7 +43,10 @@ import {
   Close,
   FullscreenExit,
   Fullscreen,
-  Save
+  Save,
+  Add,
+  ArrowForward,
+  FolderSpecial
 } from '@mui/icons-material';
 import { generateDocument, DOCUMENT_TYPES, previewDocument } from '../../services/documentService';
 import DocumentMenu from '../DocumentMenu.jsx';
@@ -385,6 +390,95 @@ function RecapitulatifStep({
             </CardContent>
           </Card>
         </Grid>
+
+        {/* Documents sources si disponibles */}
+        {(venteData.sourceDocument || (venteData.sourceDocuments && venteData.sourceDocuments.length > 0)) && (
+          <Grid item xs={12}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <FolderSpecial color="primary" /> Documents sources
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                
+                {venteData.sourceDocument && (
+                  <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Chip 
+                      label={(() => {
+                        switch(venteData.sourceDocument.type) {
+                          case 'FACTURE_PROFORMA': return 'Devis';
+                          case 'BON_LIVRAISON': return 'Bon de livraison';
+                          case 'FACTURE_TTC': return 'Facture';
+                          default: return venteData.sourceDocument.type;
+                        }
+                      })()}
+                      color="secondary"
+                      size="small"
+                    />
+                    <Typography variant="body2">
+                      Référence: {venteData.sourceDocument.reference}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Date: {formatDate(venteData.sourceDocument.date)}
+                    </Typography>
+                    <Link 
+                      component="button"
+                      variant="body2"
+                      onClick={() => window.open(`/ventes/${venteData.sourceDocument.id}`, '_blank')}
+                      sx={{ ml: 'auto' }}
+                    >
+                      Voir le document source
+                    </Link>
+                  </Box>
+                )}
+                
+                {venteData.sourceDocuments && venteData.sourceDocuments.length > 0 && (
+                  <Box>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Ce document est basé sur {venteData.sourceDocuments.length} documents:
+                    </Typography>
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Type</TableCell>
+                            <TableCell>Référence</TableCell>
+                            <TableCell align="right">Actions</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {venteData.sourceDocuments.map((source, index) => (
+                            <TableRow key={index}>
+                              <TableCell>
+                                {(() => {
+                                  switch(source.type) {
+                                    case 'FACTURE_PROFORMA': return 'Devis';
+                                    case 'BON_LIVRAISON': return 'Bon de livraison';
+                                    case 'FACTURE_TTC': return 'Facture';
+                                    default: return source.type;
+                                  }
+                                })()}
+                              </TableCell>
+                              <TableCell>{source.reference || source.id}</TableCell>
+                              <TableCell align="right">
+                                <IconButton 
+                                  size="small" 
+                                  onClick={() => window.open(`/ventes/${source.id}`, '_blank')}
+                                >
+                                  <ArrowForward fontSize="small" />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
 
         {/* Détails des articles */}
         <Grid item xs={12}>

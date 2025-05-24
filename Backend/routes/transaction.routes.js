@@ -40,6 +40,12 @@ router.get(
 transactionController.getById
 );
 
+// Récupérer les lignes d'une transaction
+router.get(
+'/:id/lignes',
+transactionController.getLignesTransaction
+);
+
 router.put(
 '/:id',
 validate({ body: transactionSchema }),

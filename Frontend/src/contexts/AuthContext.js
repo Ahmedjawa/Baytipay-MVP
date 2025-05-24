@@ -108,7 +108,7 @@ export const AuthProvider = ({ children }) => {
             const response = await apiClient.get('/api/auth/verify');
             console.log('Réponse de vérification du token:', response.data);
             
-            if (response.data.valid) {
+            if (response.data.success && response.data.isValid) {
               const parsedUser = JSON.parse(storedUser);
               console.log('Utilisateur parsé:', parsedUser);
               
@@ -118,28 +118,20 @@ export const AuthProvider = ({ children }) => {
                 apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
               } else {
                 console.error('Données utilisateur invalides lors de l\'initialisation');
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                setUser(null);
+                handleLogout();
               }
             } else {
               console.error('Token invalide');
-              localStorage.removeItem('token');
-              localStorage.removeItem('user');
-              setUser(null);
+              handleLogout();
             }
           } catch (error) {
             console.error('Erreur lors de la vérification du token:', error);
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            setUser(null);
+            handleLogout();
           }
         }
       } catch (error) {
         console.error('Erreur lors de l\'initialisation de l\'authentification:', error);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setUser(null);
+        handleLogout();
       } finally {
         setLoading(false);
       }
@@ -147,6 +139,18 @@ export const AuthProvider = ({ children }) => {
 
     initializeAuth();
   }, []);
+
+  const handleLogout = () => {
+    console.log('Déconnexion de l\'utilisateur');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('entrepriseId');
+    localStorage.removeItem('userRole');
+    delete apiClient.defaults.headers.common['Authorization'];
+    setUser(null);
+    window.location.href = '/login?session_expired=true';
+  };
 
   const login = async (credentials) => {
     try {
@@ -176,6 +180,7 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Les données utilisateur reçues sont incomplètes');
       }
       
+      // Stocker le token et les données utilisateur
       localStorage.setItem('token', token);
       storeUserData(normalizedUserData);
       apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -191,13 +196,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    console.log('Déconnexion de l\'utilisateur');
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    delete apiClient.defaults.headers.common['Authorization'];
-    setUser(null);
-  };
+  const logout = handleLogout;
 
   const value = {
     user,

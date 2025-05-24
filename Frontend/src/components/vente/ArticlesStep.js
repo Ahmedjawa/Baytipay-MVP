@@ -320,6 +320,7 @@ function ArticlesStep({ venteData, updateVenteData }) {
             variant="contained" 
             startIcon={<Add />}
             onClick={() => setOpenAddDialog(true)}
+            disabled={venteData.articlesLocked}
           >
             Ajouter un article
           </Button>
@@ -355,6 +356,7 @@ function ArticlesStep({ venteData, updateVenteData }) {
                         size="small" 
                         color="primary"
                         onClick={() => handleEditArticle(index)}
+                        disabled={venteData.articlesLocked}
                       >
                         <Edit fontSize="small" />
                       </IconButton>
@@ -362,6 +364,7 @@ function ArticlesStep({ venteData, updateVenteData }) {
                         size="small" 
                         color="error"
                         onClick={() => handleDeleteArticle(index)}
+                        disabled={venteData.articlesLocked}
                       >
                         <Delete fontSize="small" />
                       </IconButton>
@@ -391,6 +394,7 @@ function ArticlesStep({ venteData, updateVenteData }) {
               type="number"
               value={venteData.remise || 0}
               onChange={handleRemiseGlobaleChange}
+              disabled={venteData.articlesLocked}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">

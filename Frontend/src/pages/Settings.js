@@ -7,6 +7,7 @@ import {
 import { Refresh } from '@mui/icons-material';
 import EntrepriseSettings from '../components/EntrepriseSettings';
 import CategorySettings from '../components/CategorySettings';
+import ArticleCategorySettings from '../components/ArticleCategorySettings';
 import { useAuth } from '../contexts/AuthContext';
 import apiClient from '../utils/apiClient';
 import { useNavigate } from 'react-router-dom';
@@ -14,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 export default function Settings() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState(0);
+  const [selectedTab, setSelectedTab] = useState(0);
   const [snackbar, setSnackbar] = useState({ 
     open: false, 
     message: '', 
@@ -84,7 +85,7 @@ export default function Settings() {
   };
 
   const handleTabChange = (event, newValue) => {
-    setActiveTab(newValue);
+    setSelectedTab(newValue);
   };
   
   const handleRefresh = () => {
@@ -173,36 +174,36 @@ export default function Settings() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Paramètres
-      </Typography>
+      <Typography variant="h4" sx={{ mb: 3 }}>Paramètres</Typography>
 
-      <Tabs 
-        value={activeTab} 
-        onChange={handleTabChange}
-        sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
-      >
-        <Tab label="Entreprise" />
-        <Tab label="Catégories de dépenses" />
-      </Tabs>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs value={selectedTab} onChange={handleTabChange}>
+          <Tab label="Entreprise" />
+          <Tab label="Catégories de dépenses" />
+          <Tab label="Catégories d'articles" />
+        </Tabs>
+      </Box>
 
-      <Paper sx={{ p: 3, mt: 2 }}>
-        {activeTab === 0 ? (
-          <EntrepriseSettings 
-            userId={userData._id}
-            entrepriseId={userData.entrepriseId}
-            onError={(message) => setSnackbar({ open: true, message, severity: 'error' })}
-            onSuccess={(message) => setSnackbar({ open: true, message, severity: 'success' })}
-          />
-        ) : (
-          <CategorySettings 
-            userId={userData._id}
-            entrepriseId={userData.entrepriseId}
-            onError={(message) => setSnackbar({ open: true, message, severity: 'error' })}
-            onSuccess={(message) => setSnackbar({ open: true, message, severity: 'success' })}
-          />
-        )}
-      </Paper>
+      <Box sx={{ mt: 3 }}>
+        {selectedTab === 0 && <EntrepriseSettings 
+          userId={userData._id}
+          entrepriseId={userData.entrepriseId}
+          onError={(message) => setSnackbar({ open: true, message, severity: 'error' })}
+          onSuccess={(message) => setSnackbar({ open: true, message, severity: 'success' })}
+        />}
+        {selectedTab === 1 && <CategorySettings 
+          userId={userData._id}
+          entrepriseId={userData.entrepriseId}
+          onError={(message) => setSnackbar({ open: true, message, severity: 'error' })}
+          onSuccess={(message) => setSnackbar({ open: true, message, severity: 'success' })}
+        />}
+        {selectedTab === 2 && <ArticleCategorySettings 
+          userId={userData._id}
+          entrepriseId={userData.entrepriseId}
+          onError={(message) => setSnackbar({ open: true, message, severity: 'error' })}
+          onSuccess={(message) => setSnackbar({ open: true, message, severity: 'success' })}
+        />}
+      </Box>
 
       <Snackbar
         open={snackbar.open}
